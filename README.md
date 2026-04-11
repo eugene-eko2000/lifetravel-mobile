@@ -243,4 +243,3 @@ flutter analyze
 | iOS bundle identifier | `ai.lifetravel.lifetravelMobile` |
 | Min Android SDK | Flutter default (21) |
 | Target Android SDK | Flutter default (35) |
-# lifetravel-mobile
