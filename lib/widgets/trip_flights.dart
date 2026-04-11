@@ -308,36 +308,40 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (hasHeaderGrid)
-                          _FlightLegHeaderGrid(rows: headerRows)
-                        else ...[
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Flexible(child: Text(title,
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground))),
-                              if (dateRight.isNotEmpty)
-                                Text(dateRight, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                            ],
-                          ),
+                        if (!_detailsOpen) ...[
+                          if (hasHeaderGrid)
+                            _FlightLegHeaderGrid(rows: headerRows)
+                          else ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Flexible(child: Text(title,
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground))),
+                                if (dateRight.isNotEmpty)
+                                  Text(dateRight, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                              ],
+                            ),
+                          ],
                         ],
                         if (priceParts != null || durationMins != null || stops != null)
                           Padding(
-                            padding: const EdgeInsets.only(top: 4),
+                            padding: _detailsOpen ? EdgeInsets.zero : const EdgeInsets.only(top: 4),
                             child: Wrap(
                               spacing: 6,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 if (priceParts != null)
                                   DualPriceDisplay(primary: priceParts.primary, original: priceParts.original),
-                                if (priceParts != null && (durationMins != null || stops != null))
-                                  const Text('·', style: TextStyle(fontSize: 12, color: AppColors.muted)),
-                                if (durationMins != null)
-                                  Text(formatDurationMinutesAsHoursMinutes(durationMins),
-                                      style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                                if (stops != null)
-                                  Text('${stops.toInt()} stops',
-                                      style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                                if (!_detailsOpen) ...[
+                                  if (priceParts != null && (durationMins != null || stops != null))
+                                    const Text('·', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                                  if (durationMins != null)
+                                    Text(formatDurationMinutesAsHoursMinutes(durationMins),
+                                        style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                                  if (stops != null)
+                                    Text('${stops.toInt()} stops',
+                                        style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                                ],
                               ],
                             ),
                           ),
@@ -601,46 +605,12 @@ class _SegmentCard extends StatelessWidget {
               border: Border(top: BorderSide(color: AppColors.border.withAlpha(150))),
             ),
             padding: const EdgeInsets.only(top: 8),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 38,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('DEPARTURE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
-                      const SizedBox(height: 2),
-                      Text(depLoc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                      const SizedBox(height: 2),
-                      Text(dep ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 38,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('ARRIVAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
-                      const SizedBox(height: 2),
-                      Text(arrLoc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                      const SizedBox(height: 2),
-                      Text(arr ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 24,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('DURATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
-                      const SizedBox(height: 2),
-                      Text(duration ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                    ],
-                  ),
-                ),
+                _FareDetailRow(label: 'DEPARTURE', value: '$depLoc · ${dep ?? "—"}'),
+                _FareDetailRow(label: 'ARRIVAL', value: '$arrLoc · ${arr ?? "—"}'),
+                _FareDetailRow(label: 'DURATION', value: duration ?? '—'),
               ],
             ),
           ),
