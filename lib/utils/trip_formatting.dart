@@ -353,3 +353,260 @@ String? pickFlightOptionRouteTo(
   return pickString(opt, ['to', 'destination']) ??
       pickString(parentFlight, ['to', 'destination']);
 }
+
+// ---------------------------------------------------------------------------
+// Flight header grid helpers
+// ---------------------------------------------------------------------------
+
+String? _formatEndpointTimeOnly(Map<String, dynamic> seg, String side) {
+  final v = seg[side];
+  if (!isObject(v)) return null;
+  final raw = pickString(v as Map<String, dynamic>,
+      ['at', 'dateTime', 'localDateTime', 'datetime']);
+  if (raw == null) return null;
+  final d = DateTime.tryParse(raw);
+  if (d == null) return null;
+  final h = d.hour;
+  final ampm = h >= 12 ? 'PM' : 'AM';
+  final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+  final min = d.minute.toString().padLeft(2, '0');
+  return '$h12:$min $ampm';
+}
+
+int? _durationMinutesFromField(Map<String, dynamic> entity) {
+  final n = pickNumber(entity, ['duration_minutes', 'durationMinutes']);
+  if (n != null && n.isFinite) return n.round();
+  final s = pickString(entity, ['duration']);
+  if (s != null) return _parseDurationToMinutes(s);
+  return null;
+}
+
+String _getCityNameForEndpoint(String? iata, TripLocationMaps maps,
+    Map<String, dynamic> seg, String side) {
+  if (iata != null && maps.airportToCityMeta.containsKey(iata)) {
+    final cityIata = maps.airportToCityMeta[iata]?['cityCode'];
+    if (cityIata != null) {
+      final name = maps.cityCodeToName[cityIata];
+      if (name != null) return name;
+    }
+  }
+  final ep = seg[side];
+  if (isObject(ep)) {
+    final inline = pickString(ep as Map<String, dynamic>, ['cityName', 'city']);
+    if (inline != null) return inline;
+  }
+  return iata ?? '';
+}
+
+class FlightLegHeaderParts {
+  final String route;
+  final String schedule;
+  final String duration;
+  final String stops;
+  const FlightLegHeaderParts({
+    required this.route,
+    required this.schedule,
+    required this.duration,
+    required this.stops,
+  });
+}
+
+({int? durationMinutes, int stops}) _perLegDurationAndStopsForItin(
+    Map<String, dynamic> itin) {
+  final segs = (pickArray(itin, ['segments']) ?? [])
+      .whereType<Map<String, dynamic>>()
+      .toList();
+  return (
+    durationMinutes: _durationMinutesFromField(itin),
+    stops: segs.length > 1 ? segs.length - 1 : 0,
+  );
+}
+
+List<({int? durationMinutes, int stops})> getPerLegDurationAndStops(
+    Map<String, dynamic> record) {
+  final itineraries = pickArray(record, ['itineraries']) ?? [];
+  final objs = itineraries.whereType<Map<String, dynamic>>().toList();
+  if (objs.length > 1) return objs.map(_perLegDurationAndStopsForItin).toList();
+  if (objs.length == 1) return [_perLegDurationAndStopsForItin(objs.first)];
+  final groups = collectSegmentGroups(record);
+  return groups.map((segs) {
+    int? dur = _durationMinutesFromField(record);
+    if (dur == null) {
+      int sum = 0;
+      bool any = false;
+      for (final s in segs) {
+        final m = _durationMinutesFromField(s);
+        if (m != null) { sum += m; any = true; }
+      }
+      if (any) dur = sum;
+    }
+    return (durationMinutes: dur, stops: segs.length > 1 ? segs.length - 1 : 0);
+  }).toList();
+}
+
+FlightLegHeaderParts? getFlightLegHeaderParts(
+    Map<String, dynamic> firstSeg,
+    Map<String, dynamic> lastSeg,
+    TripLocationMaps maps,
+    ({int? durationMinutes, int stops}) leg,
+    {bool airportStyle = true}) {
+  final o = getSegmentEndpointIata(firstSeg, 'departure');
+  final d = getSegmentEndpointIata(lastSeg, 'arrival');
+  if (o == null || d == null) return null;
+  final origin = airportStyle ? o : _getCityNameForEndpoint(o, maps, firstSeg, 'departure');
+  final dest = airportStyle ? d : _getCityNameForEndpoint(d, maps, lastSeg, 'arrival');
+  final route = '$origin - $dest';
+
+  final depDate = formatFlightEndpointFromNested(firstSeg, 'departure', formatFlightDateOnly);
+  final arrDate = formatFlightEndpointFromNested(lastSeg, 'arrival', formatFlightDateOnly);
+  final depTime = _formatEndpointTimeOnly(firstSeg, 'departure');
+  final arrTime = _formatEndpointTimeOnly(lastSeg, 'arrival');
+
+  String schedule;
+  if (depDate != null && arrDate != null && depDate == arrDate) {
+    schedule = '$depDate ${depTime ?? ''} - ${arrTime ?? ''}'.replaceAll(RegExp(r'\s+'), ' ').trim();
+  } else {
+    final left = [depDate, depTime].where((s) => s != null).join(' ');
+    final right = [arrDate, arrTime].where((s) => s != null).join(' ');
+    schedule = '$left - $right'.trim();
+  }
+  if (schedule.isEmpty || schedule == '-') schedule = '—';
+
+  final duration = leg.durationMinutes != null
+      ? formatDurationMinutesAsHoursMinutes(leg.durationMinutes!)
+      : '—';
+  final stops = '${leg.stops} ${leg.stops == 1 ? "stop" : "stops"}';
+
+  return FlightLegHeaderParts(route: route, schedule: schedule, duration: duration, stops: stops);
+}
+
+List<FlightLegHeaderParts> getFlightLegHeadersFromOffer(
+    Map<String, dynamic> opt,
+    Map<String, dynamic> parentFlight,
+    TripLocationMaps maps) {
+  final record = opt;
+  final legDS = getPerLegDurationAndStops(record);
+
+  final itins = (pickArray(record, ['itineraries']) ?? [])
+      .whereType<Map<String, dynamic>>().toList();
+  if (itins.length > 1) {
+    return itins.asMap().entries.map((e) {
+      final segs = (pickArray(e.value, ['segments']) ?? [])
+          .whereType<Map<String, dynamic>>().toList();
+      final leg = e.key < legDS.length ? legDS[e.key] : (durationMinutes: null, stops: 0);
+      if (segs.isEmpty) return null;
+      return getFlightLegHeaderParts(segs.first, segs.last, maps, leg);
+    }).whereType<FlightLegHeaderParts>().toList();
+  }
+
+  final groups = collectSegmentGroups(record);
+  final g0 = groups.isNotEmpty ? groups.first : <Map<String, dynamic>>[];
+  if (g0.isEmpty) return [];
+  final leg = legDS.isNotEmpty ? legDS.first : (durationMinutes: null, stops: g0.length > 1 ? g0.length - 1 : 0);
+  final row = getFlightLegHeaderParts(g0.first, g0.last, maps, leg);
+  return row != null ? [row] : [];
+}
+
+// ---------------------------------------------------------------------------
+// Fare detail helpers (cabin class, bags)
+// ---------------------------------------------------------------------------
+
+String? formatCabinClassLabel(dynamic cabin) {
+  if (cabin is! String || cabin.trim().isEmpty) return null;
+  return toTitleCaseWords(cabin);
+}
+
+String? formatFareBagsLine(dynamic bags) {
+  if (bags == null || !isObject(bags)) return null;
+  final b = bags as Map<String, dynamic>;
+  final w = b['weight'] ?? b['maximumWeight'] ?? b['maxWeight'];
+  final weightStr = (w is num && w.isFinite)
+      ? w.toString()
+      : (w is String && w.trim().isNotEmpty)
+          ? w.trim()
+          : pickScalar(b, ['weight', 'maximumWeight', 'maxWeight']);
+  if (weightStr != null) {
+    final unit = (pickString(b, ['weightUnit', 'unit']) ?? 'kg').toLowerCase();
+    final raw = b['quantity'];
+    final qty = (raw is num && raw.isFinite) ? raw.toInt() : 1;
+    return '$qty x $weightStr$unit';
+  }
+  final raw = b['quantity'];
+  if (raw is num && raw.isFinite) {
+    final qty = raw.toInt();
+    return '$qty bag${qty == 1 ? "" : "s"}';
+  }
+  return null;
+}
+
+dynamic pickFareBagsField(Map<String, dynamic> fd, String kind) {
+  if (kind == 'checked') return fd['includedCheckedBags'] ?? fd['checkedBags'];
+  return fd['includedCabinBags'] ?? fd['cabinBags'];
+}
+
+List<Map<String, dynamic>> getFirstTravelerFareDetails(Map<String, dynamic> offerLike) {
+  final tps = pickArray(offerLike, ['travelerPricings']) ?? [];
+  for (final tp in tps) {
+    if (!isObject(tp)) continue;
+    final fds = pickArray(tp as Map<String, dynamic>, ['fareDetailsBySegment']) ?? [];
+    final objs = fds.whereType<Map<String, dynamic>>().toList();
+    if (objs.isNotEmpty) return objs;
+  }
+  return [];
+}
+
+Map<String, Map<String, dynamic>> buildFareDetailBySegmentId(List<Map<String, dynamic>> details) {
+  final map = <String, Map<String, dynamic>>{};
+  for (final fd in details) {
+    final sid = pickString(fd, ['segmentId', 'segment_id']);
+    if (sid != null) map[sid] = fd;
+  }
+  return map;
+}
+
+Map<String, dynamic>? resolveFareDetail(
+    Map<String, dynamic> seg, int index,
+    List<Map<String, dynamic>> inOrder,
+    Map<String, Map<String, dynamic>> byId) {
+  final segId = pickString(seg, ['id', 'segmentId']);
+  if (segId != null && byId.containsKey(segId)) return byId[segId];
+  if (index >= 0 && index < inOrder.length) return inOrder[index];
+  return null;
+}
+
+String itineraryGroupLabel(int index, int count) {
+  if (count == 2) return index == 0 ? 'Outbound' : 'Return';
+  return 'Leg ${index + 1}';
+}
+
+String? formatOptionCarrierAndFlightLine(
+    String? airline, String? flightNum, Map<String, String> carriers) {
+  final base = [airline, flightNum].where((s) => s != null).join(' ');
+  if (airline == null || airline.trim().isEmpty || flightNum == null || flightNum.trim().isEmpty) return base.isEmpty ? null : base;
+  if (airline.length > 3) return base;
+  final full = carriers[airline.trim().toUpperCase()];
+  return full != null ? '$base · $full' : base;
+}
+
+List<String>? getMultiItinerarySummaryLines(
+    Map<String, dynamic> record, TripLocationMaps maps) {
+  final itins = (pickArray(record, ['itineraries']) ?? [])
+      .whereType<Map<String, dynamic>>().toList();
+  if (itins.length <= 1) return null;
+  final lines = itins.map((itin) {
+    final segs = (pickArray(itin, ['segments']) ?? [])
+        .whereType<Map<String, dynamic>>().toList();
+    if (segs.isEmpty) return null;
+    final o = getSegmentEndpointIata(segs.first, 'departure');
+    final d = getSegmentEndpointIata(segs.last, 'arrival');
+    if (o == null || d == null) return null;
+    final origin = _getCityNameForEndpoint(o, maps, segs.first, 'departure');
+    final dest = _getCityNameForEndpoint(d, maps, segs.last, 'arrival');
+    final dep = formatFlightEndpointFromNested(segs.first, 'departure', formatFlightDateOnly);
+    final arr = formatFlightEndpointFromNested(segs.last, 'arrival', formatFlightDateOnly);
+    if (dep == null || arr == null) return null;
+    final datePart = dep == arr ? dep : '$dep - $arr';
+    return '$origin - $dest $datePart';
+  }).whereType<String>().toList();
+  return lines.isNotEmpty ? lines : null;
+}

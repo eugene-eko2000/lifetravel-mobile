@@ -72,6 +72,7 @@ class _FlightRowState extends State<_FlightRow> {
   Widget build(BuildContext context) {
     final provider = TripDataProvider.of(context);
     final maps = provider?.locationMaps ?? const TripLocationMaps();
+    final carriers = provider?.carrierMap ?? {};
     final from = pickString(widget.flight, ['from']);
     final to = pickString(widget.flight, ['to']);
     final options = pickArray(widget.flight, ['options']) ?? [];
@@ -83,9 +84,14 @@ class _FlightRowState extends State<_FlightRow> {
     ].where((s) => s.isNotEmpty).join(' → ');
     final displayTitle = title.isNotEmpty ? title : 'Flight ${widget.labelIndex + 1}';
 
-    final dep = formatFlightEndpointDisplay(widget.flight, 'departure', true);
-    final arr = formatFlightEndpointDisplay(widget.flight, 'arrival', true);
-    final dateSummary = [dep, arr].where((s) => s != null).join(' → ');
+    final previewSource = objectOptions.isNotEmpty ? objectOptions.first : widget.flight;
+    final multiItinLines = getMultiItinerarySummaryLines(previewSource, maps);
+
+    final depSummary = formatFlightEndpointDisplay(widget.flight, 'departure', true);
+    final arrSummary = formatFlightEndpointDisplay(widget.flight, 'arrival', true);
+    final dateSummary = (depSummary != null && arrSummary != null && depSummary == arrSummary)
+        ? depSummary
+        : [depSummary, arrSummary].where((s) => s != null).join(' → ');
 
     return Container(
       decoration: BoxDecoration(
@@ -112,17 +118,30 @@ class _FlightRowState extends State<_FlightRow> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Flexible(
-                              child: Text(displayTitle,
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground)),
-                            ),
-                            if (dateSummary.isNotEmpty)
-                              Text(dateSummary, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                          ],
-                        ),
+                        if (multiItinLines != null && multiItinLines.length > 1)
+                          ...multiItinLines.map((line) => Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Text(line,
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground)),
+                              ))
+                        else
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text.rich(TextSpan(children: [
+                                  TextSpan(text: displayTitle,
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground)),
+                                  if (dateSummary.isNotEmpty) ...[
+                                    const TextSpan(text: ' · ',
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.muted)),
+                                    TextSpan(text: dateSummary,
+                                        style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                                  ],
+                                ])),
+                              ),
+                            ],
+                          ),
                         if (objectOptions.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
@@ -149,6 +168,21 @@ class _FlightRowState extends State<_FlightRow> {
               child: _buildOptionsList(objectOptions),
             ),
           ],
+          if (_expanded && objectOptions.isEmpty)
+            Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.border)),
+                color: Color(0x19171717),
+              ),
+              padding: const EdgeInsets.all(10),
+              child: _FlightSegmentList(
+                source: widget.flight,
+                parentFlight: widget.flight,
+                maps: maps,
+                carriers: carriers,
+              ),
+            ),
         ],
       ),
     );
@@ -220,11 +254,22 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
     final carriers = provider?.carrierMap ?? {};
     final isTop = widget.optionIndex == 0;
 
+    final headerRows = getFlightLegHeadersFromOffer(widget.opt, widget.parentFlight, maps);
+    final hasHeaderGrid = headerRows.isNotEmpty;
+
     final routeFrom = pickFlightOptionRouteFrom(widget.opt, widget.parentFlight);
     final routeTo = pickFlightOptionRouteTo(widget.opt, widget.parentFlight);
     final routeTitle = [routeFrom, routeTo].where((s) => s != null).join(' → ');
     final airline = pickString(widget.opt, ['airline', 'carrier', 'validating_airline']);
-    final title = routeTitle.isNotEmpty ? routeTitle : (airline ?? 'Flight ${widget.optionIndex + 1}');
+    final flightNo = pickString(widget.opt, ['flight_number', 'number', 'flight']);
+    final carrierLine = formatOptionCarrierAndFlightLine(airline, flightNo, carriers);
+    final title = routeTitle.isNotEmpty ? routeTitle : (carrierLine ?? airline ?? 'Flight ${widget.optionIndex + 1}');
+
+    final depart = formatFlightEndpointDisplay(widget.opt, 'departure') ??
+        formatFlightEndpointDisplay(widget.parentFlight, 'departure');
+    final arrive = formatFlightEndpointDisplay(widget.opt, 'arrival') ??
+        formatFlightEndpointDisplay(widget.parentFlight, 'arrival');
+    final dateRight = [depart, arrive].where((s) => s != null).join(' → ');
 
     final price = isObject(widget.opt['price'])
         ? widget.opt['price'] as Map<String, dynamic>
@@ -234,8 +279,8 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
     final ranking = isObject(widget.opt['_ranking'])
         ? widget.opt['_ranking'] as Map<String, dynamic>
         : null;
-    final durationMins = ranking != null ? pickNumber(ranking, ['duration_minutes']) : null;
-    final stops = ranking != null ? pickNumber(ranking, ['stops']) : null;
+    final durationMins = !hasHeaderGrid && ranking != null ? pickNumber(ranking, ['duration_minutes']) : null;
+    final stops = !hasHeaderGrid && ranking != null ? pickNumber(ranking, ['stops']) : null;
 
     return Container(
       decoration: BoxDecoration(
@@ -251,10 +296,11 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
             child: Padding(
               padding: const EdgeInsets.all(10),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (widget.showChevrons)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.only(right: 8, top: 2),
                       child: Text(_detailsOpen ? '▼' : '▶',
                           style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                     ),
@@ -262,22 +308,39 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground)),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            if (priceParts != null)
-                              DualPriceDisplay(primary: priceParts.primary, original: priceParts.original),
-                            if (durationMins != null)
-                              Text(formatDurationMinutesAsHoursMinutes(durationMins),
-                                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                            if (stops != null)
-                              Text('${stops.toInt()} stops',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                          ],
-                        ),
+                        if (hasHeaderGrid)
+                          _FlightLegHeaderGrid(rows: headerRows)
+                        else ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(child: Text(title,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.foreground))),
+                              if (dateRight.isNotEmpty)
+                                Text(dateRight, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                            ],
+                          ),
+                        ],
+                        if (priceParts != null || durationMins != null || stops != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Wrap(
+                              spacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (priceParts != null)
+                                  DualPriceDisplay(primary: priceParts.primary, original: priceParts.original),
+                                if (priceParts != null && (durationMins != null || stops != null))
+                                  const Text('·', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                                if (durationMins != null)
+                                  Text(formatDurationMinutesAsHoursMinutes(durationMins),
+                                      style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                                if (stops != null)
+                                  Text('${stops.toInt()} stops',
+                                      style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -306,6 +369,42 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
   }
 }
 
+class _FlightLegHeaderGrid extends StatelessWidget {
+  final List<FlightLegHeaderParts> rows;
+  const _FlightLegHeaderGrid({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: rows.map((row) => Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.border.withAlpha(150)),
+          color: AppColors.background.withAlpha(80),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(row.route, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+            const SizedBox(height: 4),
+            Text(row.schedule, style: const TextStyle(fontSize: 12, color: AppColors.foreground)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(row.duration, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                const SizedBox(width: 16),
+                Text(row.stops, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+              ],
+            ),
+          ],
+        ),
+      )).toList(),
+    );
+  }
+}
+
 class _FlightSegmentList extends StatelessWidget {
   final Map<String, dynamic> source;
   final Map<String, dynamic> parentFlight;
@@ -321,28 +420,107 @@ class _FlightSegmentList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final segments = collectSegmentsFromRecord(source);
-    if (segments.isEmpty) {
-      final fallbackSegments = collectSegmentsFromRecord(parentFlight);
-      if (fallbackSegments.isEmpty) {
+    final fareSource = source;
+    final fareDetailsInOrder = getFirstTravelerFareDetails(fareSource);
+    final fareById = buildFareDetailBySegmentId(fareDetailsInOrder);
+
+    final groups = collectSegmentGroups(source);
+    final flatCount = groups.fold<int>(0, (n, g) => n + g.length);
+
+    if (flatCount == 0) {
+      final fallbackGroups = collectSegmentGroups(parentFlight);
+      final fbFlat = fallbackGroups.fold<int>(0, (n, g) => n + g.length);
+      if (fbFlat == 0) {
         return const Text('Per-segment breakdown is not available.',
             style: TextStyle(fontSize: 12, color: AppColors.muted));
       }
-      return _buildSegmentCards(fallbackSegments);
+      return _buildSingleGroup(fallbackGroups.first, 0, fareDetailsInOrder, fareById);
     }
-    return _buildSegmentCards(segments);
+
+    if (groups.length <= 1) {
+      return _buildSingleGroup(groups.first, 0, fareDetailsInOrder, fareById);
+    }
+
+    int segStart = 0;
+    return Column(
+      children: groups.asMap().entries.map((ge) {
+        final gi = ge.key;
+        final group = ge.value;
+        final start = segStart;
+        segStart += group.length;
+        final label = itineraryGroupLabel(gi, groups.length);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border.withAlpha(180)),
+            borderRadius: BorderRadius.circular(8),
+            color: AppColors.background.withAlpha(60),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: AppColors.border)),
+                  color: Color(0x33888888),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                        color: AppColors.foreground, letterSpacing: 0.5)),
+                    if (group.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text('${group.length} segments in this direction',
+                            style: const TextStyle(fontSize: 10, color: AppColors.muted)),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: _buildGroupCards(group, start, flatCount, fareDetailsInOrder, fareById,
+                    segIndexInLeg: true),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 
-  Widget _buildSegmentCards(List<Map<String, dynamic>> segments) {
+  Widget _buildSingleGroup(List<Map<String, dynamic>> segments, int startIdx,
+      List<Map<String, dynamic>> fareInOrder, Map<String, Map<String, dynamic>> fareById) {
+    return _buildGroupCards(segments, startIdx, segments.length, fareInOrder, fareById);
+  }
+
+  Widget _buildGroupCards(List<Map<String, dynamic>> segments, int startIdx, int totalCount,
+      List<Map<String, dynamic>> fareInOrder, Map<String, Map<String, dynamic>> fareById,
+      {bool segIndexInLeg = false}) {
     return Column(
       children: segments.asMap().entries.expand((e) {
-        final i = e.key;
+        final si = e.key;
         final seg = e.value;
-        final widgets = <Widget>[_SegmentCard(seg: seg, index: i, total: segments.length, maps: maps, carriers: carriers)];
-        if (i < segments.length - 1) {
-          final layover = formatConnectionLayover(segments[i], segments[i + 1]);
+        final globalIdx = startIdx + si;
+        final fareDetail = resolveFareDetail(seg, globalIdx, fareInOrder, fareById);
+        final widgets = <Widget>[
+          _SegmentCard(
+            seg: seg,
+            index: segIndexInLeg ? si : globalIdx,
+            total: segIndexInLeg ? segments.length : totalCount,
+            maps: maps,
+            carriers: carriers,
+            fareDetail: fareDetail,
+          ),
+        ];
+        if (si < segments.length - 1) {
+          final layover = formatConnectionLayover(segments[si], segments[si + 1]);
           if (layover != null) {
-            final hub = formatAirportLine(segments[i + 1], 'departure', maps);
+            final hub = formatAirportLine(segments[si + 1], 'departure', maps);
             widgets.add(Container(
               margin: const EdgeInsets.symmetric(vertical: 4),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -370,6 +548,7 @@ class _SegmentCard extends StatelessWidget {
   final int total;
   final TripLocationMaps maps;
   final Map<String, String> carriers;
+  final Map<String, dynamic>? fareDetail;
 
   const _SegmentCard({
     required this.seg,
@@ -377,6 +556,7 @@ class _SegmentCard extends StatelessWidget {
     required this.total,
     required this.maps,
     required this.carriers,
+    this.fareDetail,
   });
 
   @override
@@ -388,6 +568,11 @@ class _SegmentCard extends StatelessWidget {
     final dep = formatFlightEndpointFromNested(seg, 'departure');
     final arr = formatFlightEndpointFromNested(seg, 'arrival');
     final duration = formatSegmentDuration(seg);
+
+    final cabinLabel = fareDetail != null ? formatCabinClassLabel(fareDetail!['cabin']) : null;
+    final checkedBags = fareDetail != null ? formatFareBagsLine(pickFareBagsField(fareDetail!, 'checked')) : null;
+    final cabinBags = fareDetail != null ? formatFareBagsLine(pickFareBagsField(fareDetail!, 'cabin')) : null;
+    final hasFareExtras = cabinLabel != null || checkedBags != null || cabinBags != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -410,40 +595,97 @@ class _SegmentCard extends StatelessWidget {
               child: Text(operatedBy, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
             ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('DEPARTURE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
-                    const SizedBox(height: 2),
-                    Text(depLoc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                    Text(dep ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                  ],
+          // Departure / Arrival / Duration table
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: AppColors.border.withAlpha(150))),
+            ),
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 38,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('DEPARTURE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
+                      const SizedBox(height: 2),
+                      Text(depLoc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                      const SizedBox(height: 2),
+                      Text(dep ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                    ],
+                  ),
                 ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('ARRIVAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
-                    const SizedBox(height: 2),
-                    Text(arrLoc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                    Text(arr ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                  ],
+                Expanded(
+                  flex: 38,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('ARRIVAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
+                      const SizedBox(height: 2),
+                      Text(arrLoc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                      const SizedBox(height: 2),
+                      Text(arr ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                    ],
+                  ),
                 ),
+                Expanded(
+                  flex: 24,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('DURATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
+                      const SizedBox(height: 2),
+                      Text(duration ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (hasFareExtras) ...[
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.border.withAlpha(100))),
               ),
-              Column(
+              padding: const EdgeInsets.only(top: 8),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('DURATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.muted)),
-                  const SizedBox(height: 2),
-                  Text(duration ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                  if (cabinLabel != null)
+                    _FareDetailRow(label: 'CABIN CLASS', value: cabinLabel),
+                  if (checkedBags != null)
+                    _FareDetailRow(label: 'CHECKED BAGS', value: checkedBags),
+                  if (cabinBags != null)
+                    _FareDetailRow(label: 'CABIN BAGS', value: cabinBags),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FareDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _FareDetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500,
+              color: AppColors.muted, letterSpacing: 0.5)),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(fontSize: 12, color: AppColors.foreground)),
         ],
       ),
     );

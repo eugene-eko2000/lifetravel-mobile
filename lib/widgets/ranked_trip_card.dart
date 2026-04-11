@@ -147,9 +147,11 @@ class _RankedTripCardState extends State<RankedTripCard> {
                 final legLabel = pickString(leg, ['title', 'name', 'label']) ??
                     pickString(leg, ['from', 'origin']) ??
                     (legsWithContent.length > 1 ? 'Leg ${legIdx + 1}' : null);
+                final legStartRaw = asIsoDate(pickString(leg, ['start_date', 'startDate']));
+                final legEndRaw = asIsoDate(pickString(leg, ['end_date', 'endDate']));
                 final legDates = [
-                  asIsoDate(pickString(leg, ['start_date', 'startDate'])),
-                  asIsoDate(pickString(leg, ['end_date', 'endDate'])),
+                  legStartRaw != null ? formatIsoDateLabel(legStartRaw) : null,
+                  legEndRaw != null ? formatIsoDateLabel(legEndRaw) : null,
                 ].where((s) => s != null).join(' → ');
 
                 return Container(

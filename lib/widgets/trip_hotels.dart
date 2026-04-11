@@ -218,9 +218,17 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
     final rawCity = cityCode ?? parentCity;
     final cityLine = rawCity != null ? formatHotelCityLine(rawCity, maps.cityCodeToName) : null;
 
-    final cin = asIsoDate(pickString(widget.parentStay, ['check_in', 'checkIn']));
-    final cout = asIsoDate(pickString(widget.parentStay, ['check_out', 'checkOut']));
-    final dateRight = [cin, cout].where((s) => s != null).join(' → ');
+    final offer = _getPrimaryHotelOffer(widget.opt);
+    final checkInOffer = offer != null ? asIsoDate(pickString(offer, ['checkInDate', 'check_in'])) : null;
+    final checkOutOffer = offer != null ? asIsoDate(pickString(offer, ['checkOutDate', 'check_out'])) : null;
+    final checkInOpt = h != null ? asIsoDate(pickString(h, ['check_in', 'checkIn'])) : null;
+    final checkOutOpt = h != null ? asIsoDate(pickString(h, ['check_out', 'checkOut'])) : null;
+    final checkInParent = asIsoDate(widget.parentStay['check_in']);
+    final checkOutParent = asIsoDate(widget.parentStay['check_out']);
+    final dateRight = [
+      checkInOffer ?? checkInOpt ?? checkInParent,
+      checkOutOffer ?? checkOutOpt ?? checkOutParent,
+    ].where((s) => s != null).join(' → ');
 
     return Container(
       decoration: BoxDecoration(
@@ -262,10 +270,13 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Wrap(
-                              spacing: 8,
+                              spacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 if (cityLine != null && cityLine.isNotEmpty)
                                   Text(cityLine, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                                if (cityLine != null && cityLine.isNotEmpty && priceParts != null)
+                                  const Text('·', style: TextStyle(fontSize: 12, color: AppColors.muted)),
                                 if (priceParts != null)
                                   DualPriceDisplay(primary: priceParts.primary, original: priceParts.original),
                               ],
@@ -278,7 +289,7 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
               ),
             ),
           ),
-          if (_detailsOpen)
+          if (_detailsOpen && offer != null)
             Container(
               width: double.infinity,
               decoration: const BoxDecoration(
@@ -286,7 +297,18 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
                 color: Color(0x19171717),
               ),
               padding: const EdgeInsets.all(10),
-              child: _HotelDetailsPanel(opt: widget.opt),
+              child: _HotelStayDetailsPanel(offer: offer),
+            ),
+          if (_detailsOpen && offer == null)
+            Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.border)),
+                color: Color(0x19171717),
+              ),
+              padding: const EdgeInsets.all(10),
+              child: const Text('No offer details available for this stay.',
+                  style: TextStyle(fontSize: 12, color: AppColors.muted)),
             ),
         ],
       ),
@@ -294,51 +316,156 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
   }
 }
 
-class _HotelDetailsPanel extends StatelessWidget {
-  final Map<String, dynamic> opt;
-  const _HotelDetailsPanel({required this.opt});
+Map<String, dynamic>? _getPrimaryHotelOffer(Map<String, dynamic> opt) {
+  final offers = pickArray(opt, ['offers']) ?? [];
+  final first = offers.whereType<Map<String, dynamic>>().firstOrNull;
+  if (first != null) return first;
+  if (pickString(opt, ['checkInDate', 'checkOutDate']) != null ||
+      pickRecord(opt, ['room']) != null ||
+      pickRecord(opt, ['policies']) != null) {
+    return opt;
+  }
+  return null;
+}
+
+String? _formatCategoryOrCode(dynamic value) {
+  if (value is! String || value.trim().isEmpty) return null;
+  return toTitleCaseWords(value.replaceAll('_', ' '));
+}
+
+String? _getRoomDescriptionText(Map<String, dynamic>? room, Map<String, dynamic>? roomInfo) {
+  final dRoom = room != null ? pickRecord(room, ['description']) : null;
+  final tFromRoom = dRoom != null ? pickString(dRoom, ['text']) : null;
+  final tFromInfo = roomInfo != null ? pickString(roomInfo, ['description']) : null;
+  final a = tFromRoom?.trim() ?? '';
+  final b = tFromInfo?.trim() ?? '';
+  final best = a.length >= b.length ? a : b;
+  return best.isNotEmpty ? best : null;
+}
+
+class _HotelStayDetailsPanel extends StatelessWidget {
+  final Map<String, dynamic> offer;
+  const _HotelStayDetailsPanel({required this.offer});
 
   @override
   Widget build(BuildContext context) {
-    final offers = pickArray(opt, ['offers']) ?? [];
-    final offer = offers.whereType<Map<String, dynamic>>().firstOrNull;
-    if (offer == null) {
-      return const Text('No offer details available.',
-          style: TextStyle(fontSize: 12, color: AppColors.muted));
-    }
-
     final room = pickRecord(offer, ['room']);
+    final roomInfo = pickRecord(offer, ['roomInformation']);
     final typeEst = room != null ? pickRecord(room, ['typeEstimated']) : null;
-    final category = typeEst != null ? pickString(typeEst, ['category']) : null;
-    final bedType = typeEst != null ? pickString(typeEst, ['bedType']) : null;
-    final beds = typeEst?['beds'];
+    final typeEstRi = roomInfo != null ? pickRecord(roomInfo, ['typeEstimated']) : null;
+    final category = _formatCategoryOrCode(typeEst?['category'] ?? typeEstRi?['category']);
+    final roomTypeCode = pickString(room ?? {}, ['type']) ?? pickString(roomInfo ?? {}, ['type']);
+    final bedType = _formatCategoryOrCode(typeEst?['bedType'] ?? typeEstRi?['bedType']);
+    final rawBeds = typeEst?['beds'] ?? typeEstRi?['beds'];
+    final beds = (rawBeds is num && rawBeds.isFinite) ? rawBeds.toInt() : null;
+    final amenities = _getRoomDescriptionText(room, roomInfo);
+
     final policies = pickRecord(offer, ['policies']);
     final paymentType = policies != null ? pickString(policies, ['paymentType']) : null;
+    final refundable = policies != null ? pickRecord(policies, ['refundable']) : null;
+    final refundLabel = refundable != null ? pickString(refundable, ['cancellationRefund']) : null;
+    final cancellations = policies != null
+        ? (pickArray(policies, ['cancellations']) ?? []).whereType<Map<String, dynamic>>().toList()
+        : <Map<String, dynamic>>[];
+    final prepay = policies != null ? pickRecord(policies, ['prepay']) : null;
+    final prepayDeadline = prepay != null ? pickString(prepay, ['deadline']) : null;
+    final accepted = prepay != null ? pickRecord(prepay, ['acceptedPayments']) : null;
+    final ccList = accepted != null
+        ? (pickArray(accepted, ['creditCards']) ?? []).whereType<String>().toList()
+        : <String>[];
+    final payMethods = accepted != null
+        ? (pickArray(accepted, ['methods']) ?? []).whereType<String>().toList()
+        : <String>[];
+
+    final rateCode = pickString(offer, ['rateCode']);
+    final rateFamily = pickRecord(offer, ['rateFamilyEstimated']);
+    final rateFamilyCode = rateFamily != null ? pickString(rateFamily, ['code']) : null;
+    final commission = pickRecord(offer, ['commission']);
+    final commissionPct = commission != null ? pickScalar(commission, ['percentage']) : null;
     final guests = pickRecord(offer, ['guests']);
     final adults = guests != null ? pickNumber(guests, ['adults']) : null;
 
-    final items = <Widget>[];
-    if (category != null) {
-      items.add(_DetailRow(label: 'Room type', value: toTitleCaseWords(category)));
-    }
-    if (bedType != null) {
-      final bedsLine = beds is num
-          ? '$beds ${toTitleCaseWords(bedType).toLowerCase()} bed${beds == 1 ? '' : 's'}'
-          : toTitleCaseWords(bedType);
-      items.add(_DetailRow(label: 'Beds', value: bedsLine));
-    }
-    if (paymentType != null) {
-      items.add(_DetailRow(label: 'Payment', value: toTitleCaseWords(paymentType)));
-    }
-    if (adults != null) {
-      items.add(_DetailRow(label: 'Guests', value: '${adults.toInt()} adult${adults == 1 ? '' : 's'}'));
-    }
+    final roomTypeLine = () {
+      if (category != null && roomTypeCode != null && roomTypeCode != category) return '$category ($roomTypeCode)';
+      if (category != null) return category;
+      if (roomTypeCode != null) return roomTypeCode;
+      return null;
+    }();
+    final bedsLine = () {
+      if (beds != null && bedType != null) return '$beds ${bedType.toLowerCase()} bed${beds == 1 ? "" : "s"}';
+      if (beds != null) return '$beds bed${beds == 1 ? "" : "s"}';
+      return bedType;
+    }();
 
-    if (items.isEmpty) {
+    final hasRoomBlock = roomTypeLine != null || bedsLine != null || amenities != null;
+    final hasPolicyBlock = paymentType != null || refundLabel != null ||
+        cancellations.isNotEmpty || prepayDeadline != null || ccList.isNotEmpty || payMethods.isNotEmpty;
+    final hasMetaBlock = rateCode != null || rateFamilyCode != null || commissionPct != null || adults != null;
+
+    if (!hasRoomBlock && !hasPolicyBlock && !hasMetaBlock) {
       return const Text('No room or policy details in this offer.',
           style: TextStyle(fontSize: 12, color: AppColors.muted));
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: items);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hasMetaBlock) ...[
+          if (rateCode != null)
+            _DetailRow(label: 'Rate',
+                value: rateFamilyCode != null && rateFamilyCode != rateCode
+                    ? '$rateCode · $rateFamilyCode' : rateCode),
+          if (commissionPct != null)
+            _DetailRow(label: 'Commission', value: '$commissionPct%'),
+          if (adults != null)
+            _DetailRow(label: 'Guests', value: '${adults.toInt()} adult${adults == 1 ? "" : "s"}'),
+        ],
+        if (hasRoomBlock) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 8, bottom: 4),
+            child: Text('ROOM', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                color: AppColors.muted, letterSpacing: 0.5)),
+          ),
+          if (roomTypeLine != null) _DetailRow(label: 'Room type', value: roomTypeLine),
+          if (bedsLine != null) _DetailRow(label: 'Beds', value: bedsLine),
+          if (amenities != null) _DetailRow(label: 'Room amenities', value: amenities),
+        ],
+        if (hasPolicyBlock) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 8, bottom: 4),
+            child: Text('POLICIES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                color: AppColors.muted, letterSpacing: 0.5)),
+          ),
+          if (paymentType != null)
+            _DetailRow(label: 'Payment', value: _formatCategoryOrCode(paymentType) ?? paymentType),
+          if (refundLabel != null)
+            _DetailRow(label: 'Refundability',
+                value: _formatCategoryOrCode(refundLabel.replaceAll('_', ' ')) ?? refundLabel),
+          ...cancellations.asMap().entries.map((e) {
+            final c = e.value;
+            final rawDeadline = pickString(c, ['deadline']);
+            final deadline = rawDeadline != null ? formatFlightDateTime(rawDeadline) : null;
+            final nights = pickNumber(c, ['numberOfNights']);
+            final pType = pickString(c, ['policyType']);
+            final parts = [
+              pType != null ? _formatCategoryOrCode(pType.replaceAll('_', ' ')) : null,
+              nights != null ? '${nights.toInt()} night${nights == 1 ? "" : "s"} penalty window' : null,
+              deadline != null ? 'by $deadline' : null,
+            ].where((s) => s != null).join(' · ');
+            return _DetailRow(
+                label: cancellations.length > 1 ? 'Cancellation ${e.key + 1}' : 'Cancellation',
+                value: parts.isNotEmpty ? parts : '—');
+          }),
+          if (prepayDeadline != null)
+            _DetailRow(label: 'Prepay deadline',
+                value: formatFlightDateTime(prepayDeadline) ?? prepayDeadline),
+          if (payMethods.isNotEmpty)
+            _DetailRow(label: 'Payment methods', value: payMethods.join(', ')),
+          if (ccList.isNotEmpty)
+            _DetailRow(label: 'Cards accepted', value: ccList.join(', ')),
+        ],
+      ],
+    );
   }
 }
 
