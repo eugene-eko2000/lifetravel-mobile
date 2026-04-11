@@ -83,7 +83,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final _messages = <Message>[];
   final _debugMessages = <DebugEntry>[];
   final _inputController = TextEditingController();
@@ -97,11 +97,25 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _lastPromptId;
   String? _copiedKey;
   dynamic _tripModalData;
+  late AnimationController _statusWaveController;
 
   @override
   void initState() {
     super.initState();
     _inputController.addListener(() => setState(() {}));
+    _statusWaveController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+  }
+
+  void _syncWaveAnimation() {
+    if ((_isConnecting || _isStreaming) && !_statusWaveController.isAnimating) {
+      _statusWaveController.repeat();
+    } else if (!_isConnecting && !_isStreaming && _statusWaveController.isAnimating) {
+      _statusWaveController.stop();
+      _statusWaveController.value = 0;
+    }
   }
 
   @override
@@ -110,6 +124,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _inputController.dispose();
     _scrollController.dispose();
     _inputFocus.dispose();
+    _statusWaveController.dispose();
     super.dispose();
   }
 
@@ -139,6 +154,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _inputController.clear();
       _isConnecting = true;
     });
+    _syncWaveAnimation();
 
     final assistantId = assistantMessage.id;
 
@@ -147,7 +163,10 @@ class _ChatScreenState extends State<ChatScreen> {
       prompt: prompt,
       promptId: _lastPromptId,
       onOpen: () {
-        if (mounted) setState(() { _isConnecting = false; _isStreaming = true; });
+        if (mounted) {
+          setState(() { _isConnecting = false; _isStreaming = true; });
+          _syncWaveAnimation();
+        }
       },
       onMessage: (rawData, parsed) {
         if (!mounted) return;
@@ -234,10 +253,12 @@ class _ChatScreenState extends State<ChatScreen> {
             return m.copyWith(blocks: blocks);
           });
         });
+        _syncWaveAnimation();
       },
       onClose: () {
         if (!mounted) return;
         setState(() { _isConnecting = false; _isStreaming = false; });
+        _syncWaveAnimation();
       },
     );
   }
@@ -502,22 +523,10 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     if (message.statusText != null && message.statusText!.isNotEmpty) {
-      children.add(Container(
-        margin: const EdgeInsets.only(top: 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.background.withAlpha(130),
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.send, size: 20, color: AppColors.muted),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message.statusText!,
-                style: const TextStyle(fontSize: 12, color: AppColors.foreground))),
-          ],
-        ),
+      children.add(_AnimatedStatusBox(
+        text: message.statusText!,
+        animate: _isConnecting || _isStreaming,
+        waveAnimation: _statusWaveController,
       ));
     }
 
@@ -900,6 +909,107 @@ class _CopyBar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AnimatedStatusBox extends StatelessWidget {
+  final String text;
+  final bool animate;
+  final AnimationController waveAnimation;
+
+  const _AnimatedStatusBox({
+    required this.text,
+    required this.waveAnimation,
+    this.animate = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Stack(
+        children: [
+          if (animate)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: waveAnimation,
+                builder: (context, _) {
+                  return CustomPaint(
+                    painter: _WaveGradientPainter(waveAnimation.value),
+                  );
+                },
+              ),
+            )
+          else
+            Positioned.fill(
+              child: ColoredBox(color: AppColors.background.withAlpha(130)),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                if (animate)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(AppColors.accent.withAlpha(180)),
+                    ),
+                  )
+                else
+                  const Icon(Icons.check_circle_outline, size: 18, color: AppColors.muted),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(text,
+                      style: const TextStyle(fontSize: 12, color: AppColors.foreground)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WaveGradientPainter extends CustomPainter {
+  final double progress;
+  _WaveGradientPainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final full = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawRect(full, Paint()..color = AppColors.surface);
+
+    final waveW = size.width * 0.6;
+    final left = -waveW + (size.width + waveW) * progress;
+    final waveRect = Rect.fromLTWH(left, 0, waveW, size.height);
+
+    canvas.save();
+    canvas.clipRect(waveRect);
+    canvas.drawRect(
+      waveRect,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [
+            AppColors.surface,
+            Color(0xFF1A5C4A),
+            Color(0xFF22896A),
+            Color(0xFF1A5C4A),
+            AppColors.surface,
+          ],
+        ).createShader(waveRect),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_WaveGradientPainter oldDelegate) => oldDelegate.progress != progress;
 }
 
 class _PulseCursor extends StatefulWidget {
