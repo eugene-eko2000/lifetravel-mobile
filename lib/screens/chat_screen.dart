@@ -198,7 +198,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   id: id, requestId: requestId, message: msg,
                   source: source, level: level, payload: payload),
             ));
-            _isStreaming = false;
           });
           return;
         }
@@ -207,7 +206,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           final statusMsg = (parsed as Map<String, dynamic>)['message']?.toString() ?? '';
           setState(() {
             _updateAssistant(assistantId, (m) => m.copyWith(statusText: statusMsg));
-            _isStreaming = false;
           });
           return;
         }
