@@ -518,7 +518,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (message.content.isNotEmpty) {
         children.add(Text(message.content, style: const TextStyle(fontSize: 14, color: AppColors.foreground)));
       }
-      if ((_isConnecting || _isStreaming) && message.missingInfoText == null) {
+      if ((_isConnecting || _isStreaming) &&
+          message.missingInfoText == null &&
+          (message.statusText == null || message.statusText!.isEmpty)) {
         children.add(_PulseCursor());
       }
     }
@@ -812,7 +814,9 @@ class _AssistantBlocksViewState extends State<_AssistantBlocksView> {
       ));
     }
 
-    if (widget.isConnecting || widget.isStreaming) {
+    final showPulse = (widget.isConnecting || widget.isStreaming) &&
+        (widget.message.statusText == null || widget.message.statusText!.isEmpty);
+    if (showPulse) {
       widgets.add(_PulseCursor());
     }
 
