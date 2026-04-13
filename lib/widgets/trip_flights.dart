@@ -165,7 +165,7 @@ class _FlightRowState extends State<_FlightRow> {
                 color: Color(0x19171717),
               ),
               padding: const EdgeInsets.all(10),
-              child: _buildOptionsList(objectOptions),
+              child: _buildOptionsList(objectOptions, provider?.tripCurrency),
             ),
           ],
           if (_expanded && objectOptions.isEmpty)
@@ -188,7 +188,7 @@ class _FlightRowState extends State<_FlightRow> {
     );
   }
 
-  Widget _buildOptionsList(List<Map<String, dynamic>> objectOptions) {
+  Widget _buildOptionsList(List<Map<String, dynamic>> objectOptions, String? tripCurrency) {
     if (objectOptions.length > 1 && widget.onOptionsReorder != null) {
       return ReorderableListView.builder(
         shrinkWrap: true,
@@ -208,6 +208,7 @@ class _FlightRowState extends State<_FlightRow> {
             optionIndex: i,
             parentFlight: widget.flight,
             showChevrons: widget.showChevrons,
+            tripCurrency: tripCurrency,
           ),
         ),
       );
@@ -220,6 +221,7 @@ class _FlightRowState extends State<_FlightRow> {
               optionIndex: e.key,
               parentFlight: widget.flight,
               showChevrons: widget.showChevrons,
+              tripCurrency: tripCurrency,
             ),
           )).toList(),
     );
@@ -231,12 +233,15 @@ class _FlightOptionBox extends StatefulWidget {
   final int optionIndex;
   final Map<String, dynamic> parentFlight;
   final bool showChevrons;
+  /// Captured from [TripDataProvider] at build time so reorder drag overlay (no provider) still formats prices.
+  final String? tripCurrency;
 
   const _FlightOptionBox({
     required this.opt,
     required this.optionIndex,
     required this.parentFlight,
     this.showChevrons = false,
+    this.tripCurrency,
   });
 
   @override
@@ -249,7 +254,7 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
   @override
   Widget build(BuildContext context) {
     final provider = TripDataProvider.of(context);
-    final tripCurrency = provider?.tripCurrency;
+    final tripCurrency = widget.tripCurrency ?? provider?.tripCurrency;
     final maps = provider?.locationMaps ?? const TripLocationMaps();
     final carriers = provider?.carrierMap ?? {};
     final isTop = widget.optionIndex == 0;

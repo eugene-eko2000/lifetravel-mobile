@@ -957,18 +957,11 @@ class _AnimatedStatusBox extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                if (animate)
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(AppColors.accent.withAlpha(180)),
-                    ),
-                  )
-                else
-                  const Icon(Icons.check_circle_outline, size: 18, color: AppColors.muted),
-                const SizedBox(width: 10),
+                if (!animate)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 10),
+                    child: Icon(Icons.check_circle_outline, size: 18, color: AppColors.muted),
+                  ),
                 Expanded(
                   child: Text(text,
                       style: const TextStyle(fontSize: 12, color: AppColors.foreground)),
