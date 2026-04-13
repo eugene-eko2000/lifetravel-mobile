@@ -386,17 +386,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ),
           if (_messages.isNotEmpty)
             GestureDetector(
-              onTap: _startNewTrip,
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
-                  color: AppColors.sendButton,
-                ),
-                child: const Text(
-                  'New Trip',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white),
+              onTap: (_isConnecting || _isStreaming) ? null : _startNewTrip,
+              child: Opacity(
+                opacity: (_isConnecting || _isStreaming) ? 0.4 : 1.0,
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    color: AppColors.sendButton,
+                  ),
+                  child: const Text(
+                    'New Trip',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white),
+                  ),
                 ),
               ),
             ),
