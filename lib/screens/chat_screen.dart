@@ -279,6 +279,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     setState(() => _tripModalData = data);
   }
 
+  void _startNewTrip() {
+    _wsService.close();
+    setState(() {
+      _messages.clear();
+      _debugMessages.clear();
+      _isConnecting = false;
+      _isStreaming = false;
+      _isDebugOpen = false;
+      _lastPromptId = null;
+      _tripModalData = null;
+    });
+    _syncWaveAnimation();
+    _inputFocus.requestFocus();
+  }
+
   void _showDebugSheet() {
     showModalBottomSheet(
       context: context,
@@ -369,6 +384,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground)),
           ),
+          if (_messages.isNotEmpty)
+            GestureDetector(
+              onTap: _startNewTrip,
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  color: AppColors.sendButton,
+                ),
+                child: const Text(
+                  'New Trip',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white),
+                ),
+              ),
+            ),
           if (widget.isDevMode)
             GestureDetector(
               onTap: () {
