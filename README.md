@@ -63,13 +63,18 @@ flutter pub get
 
 ## Configuration
 
-The WebSocket backend URL is set at compile time via the `WS_BASE_URL` Dart define. It defaults to `wss://api.lifetravel.ai`.
+The following Dart defines are available at compile time:
 
-To override it (e.g. for local development):
+| Define | Default | Description |
+|---|---|---|
+| `WS_BASE_URL` | `wss://api.lifetravel.ai` | WebSocket backend URL |
+| `APP_MODE` | `prod` | `dev` enables the debug panel; `prod` hides it |
+
+To override them (e.g. for local development):
 
 ```bash
-flutter run --dart-define=WS_BASE_URL=ws://10.0.2.2:8080   # Android emulator
-flutter run --dart-define=WS_BASE_URL=ws://localhost:8080    # iOS simulator
+flutter run --dart-define=WS_BASE_URL=ws://10.0.2.2:8080 --dart-define=APP_MODE=dev   # Android emulator
+flutter run --dart-define=WS_BASE_URL=ws://localhost:8080 --dart-define=APP_MODE=dev    # iOS simulator
 ```
 
 > **Note:** Android emulators access the host machine at `10.0.2.2`, not `localhost`.
@@ -157,10 +162,10 @@ flutter build appbundle --release
 
 Output: `build/app/outputs/bundle/release/app-release.aab`
 
-### With a Custom Backend URL
+### With Custom Configuration
 
 ```bash
-flutter build apk --release --dart-define=WS_BASE_URL=wss://custom.api.host
+flutter build apk --release --dart-define=WS_BASE_URL=wss://custom.api.host --dart-define=APP_MODE=dev
 ```
 
 ### Release Signing

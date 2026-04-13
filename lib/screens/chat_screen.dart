@@ -77,7 +77,8 @@ bool _isStatusMessage(dynamic value) {
 
 class ChatScreen extends StatefulWidget {
   final String wsBaseUrl;
-  const ChatScreen({super.key, this.wsBaseUrl = _defaultWsUrl});
+  final bool isDevMode;
+  const ChatScreen({super.key, this.wsBaseUrl = _defaultWsUrl, this.isDevMode = false});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -368,24 +369,25 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.foreground)),
           ),
-          GestureDetector(
-            onTap: () {
-              setState(() => _isDebugOpen = !_isDebugOpen);
-              if (_isDebugOpen) _showDebugSheet();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(6),
-                color: _isDebugOpen ? AppColors.accent : AppColors.surface,
-              ),
-              child: Text(
-                _isDebugOpen ? 'Debug on' : 'Debug',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.foreground),
+          if (widget.isDevMode)
+            GestureDetector(
+              onTap: () {
+                setState(() => _isDebugOpen = !_isDebugOpen);
+                if (_isDebugOpen) _showDebugSheet();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(6),
+                  color: _isDebugOpen ? AppColors.accent : AppColors.surface,
+                ),
+                child: Text(
+                  _isDebugOpen ? 'Debug on' : 'Debug',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.foreground),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

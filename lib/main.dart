@@ -7,6 +7,12 @@ const String _wsBaseUrl = String.fromEnvironment(
   defaultValue: 'wss://api.lifetravel.ai',
 );
 
+const String _appMode = String.fromEnvironment(
+  'APP_MODE',
+  defaultValue: 'prod',
+);
+const bool isDevMode = _appMode == 'dev';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const LifeTravelApp());
@@ -21,7 +27,7 @@ class LifeTravelApp extends StatelessWidget {
       title: 'LifeTravel',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: const ChatScreen(wsBaseUrl: _wsBaseUrl),
+      home: const ChatScreen(wsBaseUrl: _wsBaseUrl, isDevMode: isDevMode),
     );
   }
 }
