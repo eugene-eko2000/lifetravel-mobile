@@ -110,6 +110,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// True until the latest assistant turn has at least one block or missing-info (covers pre-status gap and active status).
+  bool get _newTripDisabled =>
+      _isConnecting ||
+      (_messages.isNotEmpty &&
+          _messages.last.role == MessageRole.assistant &&
+          _messages.last.blocks.isEmpty &&
+          (_messages.last.missingInfoText == null || _messages.last.missingInfoText!.isEmpty));
+
   void _syncWaveAnimation() {
     if ((_isConnecting || _isStreaming) && !_statusWaveController.isAnimating) {
       _statusWaveController.repeat();
@@ -386,9 +394,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ),
           if (_messages.isNotEmpty)
             GestureDetector(
-              onTap: (_isConnecting || _isStreaming) ? null : _startNewTrip,
+              onTap: _newTripDisabled ? null : _startNewTrip,
               child: Opacity(
-                opacity: (_isConnecting || _isStreaming) ? 0.4 : 1.0,
+                opacity: _newTripDisabled ? 0.4 : 1.0,
                 child: Container(
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
