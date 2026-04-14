@@ -1,11 +1,13 @@
 import 'dart:convert';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:io';
+
+import 'package:web_socket_channel/io.dart';
 
 typedef WsMessageHandler = void Function(String rawData, dynamic parsed);
 typedef WsVoidCallback = void Function();
 
 class TripWebSocketService {
-  WebSocketChannel? _channel;
+  IOWebSocketChannel? _channel;
 
   void connect({
     required String baseUrl,
@@ -19,7 +21,13 @@ class TripWebSocketService {
     close();
 
     final wsUrl = '$baseUrl/api/v1/trip';
-    _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+    // RFC 7692 permessage-deflate: negotiated on the handshake (server must offer it).
+    _channel = IOWebSocketChannel(
+      WebSocket.connect(
+        wsUrl,
+        compression: CompressionOptions.compressionDefault,
+      ),
+    );
 
     onOpen();
 
