@@ -10,12 +10,15 @@ class RankedTripCard extends StatefulWidget {
   final Map<String, dynamic> envelope;
   final Map<String, dynamic> ranked;
   final bool detailed;
+  /// When true (e.g. full-screen modal), trip chrome uses 100% opacity instead of chat translucency.
+  final bool opaqueLayers;
 
   const RankedTripCard({
     super.key,
     required this.envelope,
     required this.ranked,
     this.detailed = false,
+    this.opaqueLayers = false,
   });
 
   @override
@@ -90,14 +93,18 @@ class _RankedTripCardState extends State<RankedTripCard> {
       return f.isNotEmpty || h.isNotEmpty;
     }).toList();
 
+    final layers = TripLayers.of(widget.opaqueLayers);
+
     return TripDataProvider(
       tripCurrency: _tripCurrency,
       locationMaps: _locationMaps,
       carrierMap: _carrierMap,
+      opaqueLayers: widget.opaqueLayers,
       child: Container(
+        width: double.infinity,
         decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.border),
+          color: layers.surface,
+          border: Border.all(color: layers.border),
           borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(12),
@@ -115,6 +122,7 @@ class _RankedTripCardState extends State<RankedTripCard> {
                 runSpacing: 8,
                 children: [
                   _SummaryTile(
+                    layers: layers,
                     label: 'Dates',
                     child: Text(
                       formatTripSummaryDates(tripStartIso, tripEndIso, totalDays),
@@ -122,6 +130,7 @@ class _RankedTripCardState extends State<RankedTripCard> {
                     ),
                   ),
                   _SummaryTile(
+                    layers: layers,
                     label: 'Flights',
                     child: flightsParts != null
                         ? DualPriceDisplay(primary: flightsParts.primary, original: flightsParts.original)
@@ -129,6 +138,7 @@ class _RankedTripCardState extends State<RankedTripCard> {
                   ),
                   if (hasHotels)
                     _SummaryTile(
+                      layers: layers,
                       label: 'Hotels',
                       child: hotelsParts != null
                           ? DualPriceDisplay(primary: hotelsParts.primary, original: hotelsParts.original)
@@ -157,8 +167,8 @@ class _RankedTripCardState extends State<RankedTripCard> {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: AppColors.background.withAlpha(80),
-                    border: Border.all(color: AppColors.border.withAlpha(200)),
+                    color: layers.background,
+                    border: Border.all(color: layers.border),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   padding: const EdgeInsets.all(10),
@@ -208,9 +218,10 @@ class _RankedTripCardState extends State<RankedTripCard> {
 }
 
 class _SummaryTile extends StatelessWidget {
+  final TripLayers layers;
   final String label;
   final Widget child;
-  const _SummaryTile({required this.label, required this.child});
+  const _SummaryTile({required this.layers, required this.label, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -218,8 +229,8 @@ class _SummaryTile extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 100),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.background.withAlpha(100),
-        border: Border.all(color: AppColors.border),
+        color: layers.background,
+        border: Border.all(color: layers.border),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -239,12 +250,14 @@ class TripDataProvider extends InheritedWidget {
   final String? tripCurrency;
   final TripLocationMaps locationMaps;
   final Map<String, String> carrierMap;
+  final bool opaqueLayers;
 
   const TripDataProvider({
     super.key,
     required this.tripCurrency,
     required this.locationMaps,
     required this.carrierMap,
+    this.opaqueLayers = false,
     required super.child,
   });
 
@@ -256,5 +269,6 @@ class TripDataProvider extends InheritedWidget {
   bool updateShouldNotify(TripDataProvider oldWidget) =>
       tripCurrency != oldWidget.tripCurrency ||
       locationMaps != oldWidget.locationMaps ||
-      carrierMap != oldWidget.carrierMap;
+      carrierMap != oldWidget.carrierMap ||
+      opaqueLayers != oldWidget.opaqueLayers;
 }

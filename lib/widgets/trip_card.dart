@@ -47,7 +47,9 @@ Map<String, dynamic>? _normalizeTripRoot(dynamic data) {
 class TripCard extends StatelessWidget {
   final dynamic data;
   final bool detailed;
-  const TripCard({super.key, required this.data, this.detailed = false});
+  /// When true (e.g. full-screen modal), surfaces use solid theme colors instead of chat translucency.
+  final bool opaqueLayers;
+  const TripCard({super.key, required this.data, this.detailed = false, this.opaqueLayers = false});
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +60,7 @@ class TripCard extends StatelessWidget {
           envelope: d,
           ranked: d['ranked_trip'] as Map<String, dynamic>,
           detailed: detailed,
+          opaqueLayers: opaqueLayers,
         );
       }
       if (d.containsKey('ranked_itinerary') && isObject(d['ranked_itinerary'])) {
@@ -65,6 +68,7 @@ class TripCard extends StatelessWidget {
           envelope: d,
           ranked: d['ranked_itinerary'] as Map<String, dynamic>,
           detailed: detailed,
+          opaqueLayers: opaqueLayers,
         );
       }
     }
@@ -89,11 +93,13 @@ class TripCard extends StatelessWidget {
     final summary = pickString(root, ['summary', 'overview', 'description']) ??
         pickString(root, ['notes']);
     final days = pickArray(root, ['days', 'day_plans', 'dayPlans']) ?? [];
+    final layers = TripLayers.of(opaqueLayers);
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: layers.surface,
+        border: Border.all(color: layers.border),
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(12),
@@ -134,7 +140,7 @@ class TripCard extends StatelessWidget {
               final dayDate = dayObj != null ? pickString(dayObj, ['date', 'day', 'start_date']) : null;
               final activities =
                   dayObj != null ? (pickArray(dayObj, ['activities', 'items', 'plan']) ?? []) : [];
-              return _DayTile(title: dayTitle, date: dayDate, activities: activities);
+              return _DayTile(layers: layers, title: dayTitle, date: dayDate, activities: activities);
             }),
             if (days.length > 7)
               const Padding(
@@ -150,18 +156,19 @@ class TripCard extends StatelessWidget {
 }
 
 class _DayTile extends StatelessWidget {
+  final TripLayers layers;
   final String title;
   final String? date;
   final List<dynamic> activities;
-  const _DayTile({required this.title, this.date, required this.activities});
+  const _DayTile({required this.layers, required this.title, this.date, required this.activities});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: AppColors.background.withAlpha(100),
-        border: Border.all(color: AppColors.border),
+        color: layers.background,
+        border: Border.all(color: layers.border),
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.all(10),

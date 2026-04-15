@@ -5,6 +5,9 @@ import '../utils/trip_formatting.dart';
 import 'dual_price_display.dart';
 import 'ranked_trip_card.dart';
 
+TripLayers _tripLayers(BuildContext context) =>
+    TripLayers.of(TripDataProvider.of(context)?.opaqueLayers ?? false);
+
 class LegHotelsBlock extends StatelessWidget {
   final List<dynamic> hotels;
   final int legIndex;
@@ -71,6 +74,7 @@ class _HotelRowState extends State<_HotelRow> {
   @override
   Widget build(BuildContext context) {
     final provider = TripDataProvider.of(context);
+    final layers = _tripLayers(context);
     final maps = provider?.locationMaps ?? const TripLocationMaps();
     final cityCode = pickString(widget.stay, ['city_code', 'city']);
     final options = pickArray(widget.stay, ['options']) ?? [];
@@ -82,8 +86,8 @@ class _HotelRowState extends State<_HotelRow> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.background.withAlpha(100),
-        border: Border.all(color: AppColors.border.withAlpha(200)),
+        color: layers.background,
+        border: Border.all(color: layers.border),
         borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.antiAlias,
@@ -122,9 +126,9 @@ class _HotelRowState extends State<_HotelRow> {
           if (_expanded && objectOptions.isNotEmpty)
             Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-                color: Color(0x19171717),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+                color: layers.background,
               ),
               padding: const EdgeInsets.all(10),
               child: _buildOptionsList(objectOptions),
@@ -201,6 +205,7 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
   @override
   Widget build(BuildContext context) {
     final provider = TripDataProvider.of(context);
+    final layers = _tripLayers(context);
     final tripCurrency = provider?.tripCurrency;
     final maps = provider?.locationMaps ?? const TripLocationMaps();
     final isTop = widget.optionIndex == 0;
@@ -232,9 +237,9 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: isTop ? AppColors.emeraldBorder : AppColors.border.withAlpha(200)),
+        border: Border.all(color: layers.emeraldOptionBorder(isTop)),
         borderRadius: BorderRadius.circular(8),
-        color: isTop ? AppColors.emeraldBg : AppColors.background.withAlpha(100),
+        color: layers.emeraldOptionFill(isTop),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -292,9 +297,9 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
           if (_detailsOpen && offer != null)
             Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-                color: Color(0x19171717),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+                color: layers.background,
               ),
               padding: const EdgeInsets.all(10),
               child: _HotelStayDetailsPanel(offer: offer),
@@ -302,9 +307,9 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
           if (_detailsOpen && offer == null)
             Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-                color: Color(0x19171717),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+                color: layers.background,
               ),
               padding: const EdgeInsets.all(10),
               child: const Text('No offer details available for this stay.',

@@ -5,6 +5,9 @@ import '../utils/trip_formatting.dart';
 import 'dual_price_display.dart';
 import 'ranked_trip_card.dart';
 
+TripLayers _tripLayers(BuildContext context) =>
+    TripLayers.of(TripDataProvider.of(context)?.opaqueLayers ?? false);
+
 class LegFlightsBlock extends StatelessWidget {
   final List<dynamic> flights;
   final int legIndex;
@@ -71,6 +74,7 @@ class _FlightRowState extends State<_FlightRow> {
   @override
   Widget build(BuildContext context) {
     final provider = TripDataProvider.of(context);
+    final layers = _tripLayers(context);
     final maps = provider?.locationMaps ?? const TripLocationMaps();
     final carriers = provider?.carrierMap ?? {};
     final from = pickString(widget.flight, ['from']);
@@ -95,8 +99,8 @@ class _FlightRowState extends State<_FlightRow> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.background.withAlpha(100),
-        border: Border.all(color: AppColors.border.withAlpha(200)),
+        color: layers.background,
+        border: Border.all(color: layers.border),
         borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.antiAlias,
@@ -160,9 +164,9 @@ class _FlightRowState extends State<_FlightRow> {
           if (_expanded && objectOptions.isNotEmpty) ...[
             Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-                color: Color(0x19171717),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+                color: layers.background,
               ),
               padding: const EdgeInsets.all(10),
               child: _buildOptionsList(objectOptions, provider?.tripCurrency),
@@ -171,9 +175,9 @@ class _FlightRowState extends State<_FlightRow> {
           if (_expanded && objectOptions.isEmpty)
             Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-                color: Color(0x19171717),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+                color: layers.background,
               ),
               padding: const EdgeInsets.all(10),
               child: _FlightSegmentList(
@@ -254,6 +258,7 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
   @override
   Widget build(BuildContext context) {
     final provider = TripDataProvider.of(context);
+    final layers = _tripLayers(context);
     final tripCurrency = widget.tripCurrency ?? provider?.tripCurrency;
     final maps = provider?.locationMaps ?? const TripLocationMaps();
     final carriers = provider?.carrierMap ?? {};
@@ -289,9 +294,9 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: isTop ? AppColors.emeraldBorder : AppColors.border.withAlpha(200)),
+        border: Border.all(color: layers.emeraldOptionBorder(isTop)),
         borderRadius: BorderRadius.circular(8),
-        color: isTop ? AppColors.emeraldBg : AppColors.background.withAlpha(100),
+        color: layers.emeraldOptionFill(isTop),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -315,7 +320,7 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
                       children: [
                         if (!_detailsOpen) ...[
                           if (hasHeaderGrid)
-                            _FlightLegHeaderGrid(rows: headerRows)
+                            _FlightLegHeaderGrid(rows: headerRows, layers: layers)
                           else ...[
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -360,9 +365,9 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
           if (_detailsOpen)
             Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
-                color: Color(0x19171717),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+                color: layers.background,
               ),
               padding: const EdgeInsets.all(10),
               child: _FlightSegmentList(
@@ -380,7 +385,8 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
 
 class _FlightLegHeaderGrid extends StatelessWidget {
   final List<FlightLegHeaderParts> rows;
-  const _FlightLegHeaderGrid({required this.rows});
+  final TripLayers layers;
+  const _FlightLegHeaderGrid({required this.rows, required this.layers});
 
   @override
   Widget build(BuildContext context) {
@@ -390,8 +396,8 @@ class _FlightLegHeaderGrid extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.border.withAlpha(150)),
-          color: AppColors.background.withAlpha(80),
+          border: Border.all(color: layers.border),
+          color: layers.background,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -429,6 +435,7 @@ class _FlightSegmentList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final layers = _tripLayers(context);
     final fareSource = source;
     final fareDetailsInOrder = getFirstTravelerFareDetails(fareSource);
     final fareById = buildFareDetailBySegmentId(fareDetailsInOrder);
@@ -443,11 +450,11 @@ class _FlightSegmentList extends StatelessWidget {
         return const Text('Per-segment breakdown is not available.',
             style: TextStyle(fontSize: 12, color: AppColors.muted));
       }
-      return _buildSingleGroup(fallbackGroups.first, 0, fareDetailsInOrder, fareById);
+      return _buildSingleGroup(layers, fallbackGroups.first, 0, fareDetailsInOrder, fareById);
     }
 
     if (groups.length <= 1) {
-      return _buildSingleGroup(groups.first, 0, fareDetailsInOrder, fareById);
+      return _buildSingleGroup(layers, groups.first, 0, fareDetailsInOrder, fareById);
     }
 
     int segStart = 0;
@@ -461,9 +468,9 @@ class _FlightSegmentList extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border.withAlpha(180)),
+            border: Border.all(color: layers.border),
             borderRadius: BorderRadius.circular(8),
-            color: AppColors.background.withAlpha(60),
+            color: layers.background,
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -472,9 +479,9 @@ class _FlightSegmentList extends StatelessWidget {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: AppColors.border)),
-                  color: Color(0x33888888),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: layers.border)),
+                  color: layers.mutedBand,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,7 +499,7 @@ class _FlightSegmentList extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.all(10),
-                child: _buildGroupCards(group, start, flatCount, fareDetailsInOrder, fareById,
+                child: _buildGroupCards(layers, group, start, flatCount, fareDetailsInOrder, fareById,
                     segIndexInLeg: true),
               ),
             ],
@@ -502,12 +509,12 @@ class _FlightSegmentList extends StatelessWidget {
     );
   }
 
-  Widget _buildSingleGroup(List<Map<String, dynamic>> segments, int startIdx,
+  Widget _buildSingleGroup(TripLayers layers, List<Map<String, dynamic>> segments, int startIdx,
       List<Map<String, dynamic>> fareInOrder, Map<String, Map<String, dynamic>> fareById) {
-    return _buildGroupCards(segments, startIdx, segments.length, fareInOrder, fareById);
+    return _buildGroupCards(layers, segments, startIdx, segments.length, fareInOrder, fareById);
   }
 
-  Widget _buildGroupCards(List<Map<String, dynamic>> segments, int startIdx, int totalCount,
+  Widget _buildGroupCards(TripLayers layers, List<Map<String, dynamic>> segments, int startIdx, int totalCount,
       List<Map<String, dynamic>> fareInOrder, Map<String, Map<String, dynamic>> fareById,
       {bool segIndexInLeg = false}) {
     return Column(
@@ -518,6 +525,7 @@ class _FlightSegmentList extends StatelessWidget {
         final fareDetail = resolveFareDetail(seg, globalIdx, fareInOrder, fareById);
         final widgets = <Widget>[
           _SegmentCard(
+            layers: layers,
             seg: seg,
             index: segIndexInLeg ? si : globalIdx,
             total: segIndexInLeg ? segments.length : totalCount,
@@ -534,7 +542,7 @@ class _FlightSegmentList extends StatelessWidget {
               margin: const EdgeInsets.symmetric(vertical: 4),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border.withAlpha(150), style: BorderStyle.solid),
+                border: Border.all(color: layers.border, style: BorderStyle.solid),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text.rich(TextSpan(children: [
@@ -552,6 +560,7 @@ class _FlightSegmentList extends StatelessWidget {
 }
 
 class _SegmentCard extends StatelessWidget {
+  final TripLayers layers;
   final Map<String, dynamic> seg;
   final int index;
   final int total;
@@ -560,6 +569,7 @@ class _SegmentCard extends StatelessWidget {
   final Map<String, dynamic>? fareDetail;
 
   const _SegmentCard({
+    required this.layers,
     required this.seg,
     required this.index,
     required this.total,
@@ -587,9 +597,9 @@ class _SegmentCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border.withAlpha(130)),
+        border: Border.all(color: layers.border),
         borderRadius: BorderRadius.circular(6),
-        color: AppColors.background.withAlpha(80),
+        color: layers.background,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,7 +617,7 @@ class _SegmentCard extends StatelessWidget {
           // Departure / Arrival / Duration table
           Container(
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.border.withAlpha(150))),
+              border: Border(top: BorderSide(color: layers.border)),
             ),
             padding: const EdgeInsets.only(top: 8),
             child: Column(
@@ -623,7 +633,7 @@ class _SegmentCard extends StatelessWidget {
             const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border.withAlpha(100))),
+                border: Border(top: BorderSide(color: layers.border)),
               ),
               padding: const EdgeInsets.only(top: 8),
               child: Column(

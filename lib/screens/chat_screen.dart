@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/message.dart';
@@ -362,16 +364,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       child: Scaffold(
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            Column(
-              children: [
-                _buildHeader(),
-                Expanded(child: _buildTripSection()),
-                _buildInputArea(),
-              ],
-            ),
-            if (_tripModalData != null) _buildTripModal(),
+            _buildHeader(),
+            Expanded(child: _buildTripSection()),
+            _buildInputArea(),
           ],
         ),
       ),
@@ -436,66 +433,77 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildTripSection() {
-    return Column(
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppColors.border)),
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/images/lifetravel_background.jpg'),
+                fit: BoxFit.cover,
+                alignment: Alignment.centerRight,
+              ),
+            ),
           ),
-          child: const Text('Trip',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.muted)),
         ),
-        Expanded(
+        Positioned.fill(
           child: _messages.isEmpty
               ? _buildEmptyState()
               : ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
                   itemCount: _messages.length,
                   itemBuilder: (context, index) => _buildMessageBubble(_messages[index]),
                 ),
         ),
+        if (_tripModalData != null) _buildTripModal(),
       ],
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.surface),
-            child: const Icon(Icons.chat_bubble_outline, color: AppColors.muted, size: 28),
-          ),
-          const SizedBox(height: 12),
-          const Text("Hi, I'm your personal travel assistant.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: AppColors.muted)),
-        ],
-      ),
-    );
+    return const SizedBox.expand();
   }
 
   Widget _buildMessageBubble(Message message) {
     final isUser = message.role == MessageRole.user;
+    final maxW = MediaQuery.of(context).size.width * (isUser ? 0.85 : 0.95);
+    if (!isUser) {
+      return Align(
+        alignment: Alignment.center,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 24),
+          constraints: BoxConstraints(maxWidth: maxW),
+          padding: const EdgeInsets.all(12),
+          child: _buildAssistantContent(message),
+        ),
+      );
+    }
     return Align(
-      alignment: isUser ? Alignment.centerLeft : Alignment.center,
+      alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 24),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * (isUser ? 0.85 : 0.95),
-        ),
+        constraints: BoxConstraints(maxWidth: maxW),
         decoration: BoxDecoration(
-          color: isUser ? AppColors.userBubble : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
+          boxShadow: AppColors.userPromptBubbleShadows,
         ),
-        padding: const EdgeInsets.all(12),
-        child: isUser ? _buildUserContent(message) : _buildAssistantContent(message),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.userBubbleDisplay,
+                border: Border.all(color: AppColors.borderPromptDisplay),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: _buildUserContent(message),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -686,79 +694,58 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// Fills exactly the chat scroll region (between header and input). Size follows [Expanded], not screen %.
   Widget _buildTripModal() {
     return Positioned.fill(
       child: Material(
-        color: Colors.transparent,
-        child: GestureDetector(
-          onTap: () => setState(() => _tripModalData = null),
-          child: Container(
-            color: Colors.black.withAlpha(153),
-            child: Center(
-            child: GestureDetector(
-              onTap: () {},
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.95,
-                  maxHeight: MediaQuery.of(context).size.height * 0.9,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          const Text('Trip',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.foreground)),
-                          const Spacer(),
-                          if (_isDebugOpen)
-                            GestureDetector(
-                              onTap: () => _copyToClipboard(
-                                const JsonEncoder.withIndent('  ').convert(_tripModalData),
-                                'trip-modal',
-                              ),
-                              child: Text(
-                                _copiedKey == 'trip-modal' ? 'Copied!' : 'Copy',
-                                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                              ),
-                            ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () => setState(() => _tripModalData = null),
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: AppColors.border),
-                                color: AppColors.surface,
-                              ),
-                              child: const Icon(Icons.close, size: 16, color: AppColors.foreground),
-                            ),
-                          ),
-                        ],
+        color: AppColors.background,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Text('Trip',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.foreground)),
+                  const Spacer(),
+                  if (_isDebugOpen)
+                    GestureDetector(
+                      onTap: () => _copyToClipboard(
+                        const JsonEncoder.withIndent('  ').convert(_tripModalData),
+                        'trip-modal',
+                      ),
+                      child: Text(
+                        _copiedKey == 'trip-modal' ? 'Copied!' : 'Copy',
+                        style: const TextStyle(fontSize: 12, color: AppColors.muted),
                       ),
                     ),
-                    const Divider(height: 1, color: AppColors.border),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: TripCard(data: _tripModalData, detailed: true),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() => _tripModalData = null),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.border),
+                        color: AppColors.surface,
                       ),
+                      child: const Icon(Icons.close, size: 16, color: AppColors.foreground),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ),
+            const Divider(height: 1, color: AppColors.border),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: TripCard(data: _tripModalData, detailed: true, opaqueLayers: true),
+              ),
+            ),
+          ],
         ),
-      ),
       ),
     );
   }
@@ -828,8 +815,8 @@ class _AssistantBlocksViewState extends State<_AssistantBlocksView> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.background.withAlpha(130),
-            border: Border.all(color: AppColors.border),
+            color: AppColors.travelBackground,
+            border: Border.all(color: AppColors.travelBorder),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(b.data.toString(),
@@ -847,9 +834,9 @@ class _AssistantBlocksViewState extends State<_AssistantBlocksView> {
             margin: const EdgeInsets.only(top: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: AppColors.travelBorder),
               borderRadius: BorderRadius.circular(16),
-              color: AppColors.surface,
+              color: AppColors.travelSurface,
             ),
             child: Text('Show more… ($hiddenCount more)',
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.muted)),
@@ -873,9 +860,21 @@ class _AssistantBlocksViewState extends State<_AssistantBlocksView> {
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400),
         decoration: BoxDecoration(
-          color: AppColors.background.withAlpha(130),
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(8),
+          color: AppColors.travelBackground,
+          border: Border.all(color: AppColors.travelBorder),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -903,8 +902,8 @@ class _AssistantBlocksViewState extends State<_AssistantBlocksView> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: AppColors.background.withAlpha(130),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.travelBackground,
+        border: Border.all(color: AppColors.travelBorder),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -942,8 +941,8 @@ class _CopyBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.travelBorder)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Align(
