@@ -665,10 +665,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 enabled: !_isConnecting,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _handleSend(),
-                style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+                style: const TextStyle(fontSize: 18, color: AppColors.foreground),
                 decoration: const InputDecoration(
                   hintText: 'Describe your travel plan...',
-                  hintStyle: TextStyle(color: AppColors.muted, fontSize: 14),
+                  hintStyle: TextStyle(color: AppColors.muted, fontSize: 18),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.zero,
