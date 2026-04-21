@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -86,7 +87,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+class _ChatScreenState extends State<ChatScreen> {
   final _messages = <Message>[];
   final _debugMessages = <DebugEntry>[];
   final _inputController = TextEditingController();
@@ -100,16 +101,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   String? _lastPromptId;
   String? _copiedKey;
   dynamic _tripModalData;
-  late AnimationController _statusWaveController;
 
   @override
   void initState() {
     super.initState();
     _inputController.addListener(() => setState(() {}));
-    _statusWaveController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    );
   }
 
   /// True until the latest assistant turn has at least one block or missing-info (covers pre-status gap and active status).
@@ -120,13 +116,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           _messages.last.blocks.isEmpty &&
           (_messages.last.missingInfoText == null || _messages.last.missingInfoText!.isEmpty));
 
-  void _syncWaveAnimation() {
-    if ((_isConnecting || _isStreaming) && !_statusWaveController.isAnimating) {
-      _statusWaveController.repeat();
-    } else if (!_isConnecting && !_isStreaming && _statusWaveController.isAnimating) {
-      _statusWaveController.stop();
-      _statusWaveController.value = 0;
-    }
+  /// Centered status / pulse with full-screen gray ripples while the assistant turn has not started streaming body text or blocks.
+  bool _ambientStatusCoversChat() {
+    if (_tripModalData != null) return false;
+    if (_messages.isEmpty) return false;
+    final m = _messages.last;
+    if (m.role != MessageRole.assistant) return false;
+    if (!(_isConnecting || _isStreaming)) return false;
+    if (m.blocks.isNotEmpty) return false;
+    if (m.missingInfoText != null && m.missingInfoText!.isNotEmpty) return false;
+    final hasStatus = m.statusText != null && m.statusText!.isNotEmpty;
+    final waitingForStreamBody = m.content.isEmpty;
+    return hasStatus || waitingForStreamBody;
   }
 
   @override
@@ -135,7 +136,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _inputController.dispose();
     _scrollController.dispose();
     _inputFocus.dispose();
-    _statusWaveController.dispose();
     super.dispose();
   }
 
@@ -165,7 +165,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       _inputController.clear();
       _isConnecting = true;
     });
-    _syncWaveAnimation();
 
     final assistantId = assistantMessage.id;
 
@@ -176,7 +175,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       onOpen: () {
         if (mounted) {
           setState(() { _isConnecting = false; _isStreaming = true; });
-          _syncWaveAnimation();
         }
       },
       onMessage: (rawData, parsed) {
@@ -262,12 +260,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             return m.copyWith(blocks: blocks);
           });
         });
-        _syncWaveAnimation();
       },
       onClose: () {
         if (!mounted) return;
         setState(() { _isConnecting = false; _isStreaming = false; });
-        _syncWaveAnimation();
       },
     );
   }
@@ -300,7 +296,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       _lastPromptId = null;
       _tripModalData = null;
     });
-    _syncWaveAnimation();
     _inputFocus.requestFocus();
   }
 
@@ -364,11 +359,19 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       child: Scaffold(
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            _buildHeader(),
-            Expanded(child: _buildTripSection()),
-            _buildInputArea(),
+            Column(
+              children: [
+                _buildHeader(),
+                Expanded(child: _buildTripSection()),
+                _buildInputArea(),
+              ],
+            ),
+            if (_ambientStatusCoversChat())
+              _AmbientStatusOverlay(
+                statusText: _messages.last.statusText,
+              ),
           ],
         ),
       ),
@@ -541,6 +544,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         isStreaming: _isStreaming,
         isDebugOpen: _isDebugOpen,
         onOpenTrip: _openTripModal,
+        suppressLoadingPulse: _ambientStatusCoversChat(),
       ));
     }
 
@@ -572,16 +576,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }
       if ((_isConnecting || _isStreaming) &&
           message.missingInfoText == null &&
-          (message.statusText == null || message.statusText!.isEmpty)) {
+          (message.statusText == null || message.statusText!.isEmpty) &&
+          !_ambientStatusCoversChat()) {
         children.add(_PulseCursor());
       }
     }
 
-    if (message.statusText != null && message.statusText!.isNotEmpty) {
-      children.add(_AnimatedStatusBox(
-        text: message.statusText!,
-        animate: _isConnecting || _isStreaming,
-        waveAnimation: _statusWaveController,
+    if (message.statusText != null &&
+        message.statusText!.isNotEmpty &&
+        !_ambientStatusCoversChat()) {
+      children.add(Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          message.statusText!,
+          style: const TextStyle(fontSize: 12, color: AppColors.muted),
+        ),
       ));
     }
 
@@ -665,10 +674,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 enabled: !_isConnecting,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _handleSend(),
-                style: const TextStyle(fontSize: 18, color: AppColors.foreground),
+                style: const TextStyle(fontSize: 16, color: AppColors.foreground),
                 decoration: const InputDecoration(
                   hintText: 'Describe your travel plan...',
-                  hintStyle: TextStyle(color: AppColors.muted, fontSize: 18),
+                  hintStyle: TextStyle(color: AppColors.muted, fontSize: 16),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.zero,
@@ -759,6 +768,7 @@ class _AssistantBlocksView extends StatefulWidget {
   final bool isStreaming;
   final bool isDebugOpen;
   final void Function(dynamic data) onOpenTrip;
+  final bool suppressLoadingPulse;
 
   const _AssistantBlocksView({
     required this.message,
@@ -768,6 +778,7 @@ class _AssistantBlocksView extends StatefulWidget {
     required this.isStreaming,
     required this.isDebugOpen,
     required this.onOpenTrip,
+    this.suppressLoadingPulse = false,
   });
 
   @override
@@ -845,7 +856,8 @@ class _AssistantBlocksViewState extends State<_AssistantBlocksView> {
       ));
     }
 
-    final showPulse = (widget.isConnecting || widget.isStreaming) &&
+    final showPulse = !widget.suppressLoadingPulse &&
+        (widget.isConnecting || widget.isStreaming) &&
         (widget.message.statusText == null || widget.message.statusText!.isEmpty);
     if (showPulse) {
       widgets.add(_PulseCursor());
@@ -959,98 +971,220 @@ class _CopyBar extends StatelessWidget {
   }
 }
 
-class _AnimatedStatusBox extends StatelessWidget {
-  final String text;
-  final bool animate;
-  final AnimationController waveAnimation;
+class _AmbientStatusOverlay extends StatefulWidget {
+  final String? statusText;
 
-  const _AnimatedStatusBox({
-    required this.text,
-    required this.waveAnimation,
-    this.animate = true,
-  });
+  const _AmbientStatusOverlay({required this.statusText});
+
+  @override
+  State<_AmbientStatusOverlay> createState() => _AmbientStatusOverlayState();
+}
+
+class _AmbientStatusOverlayState extends State<_AmbientStatusOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ripple;
+
+  @override
+  void initState() {
+    super.initState();
+    _ripple = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 14000),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ripple.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Stack(
-        children: [
-          if (animate)
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: waveAnimation,
-                builder: (context, _) {
-                  return CustomPaint(
-                    painter: _WaveGradientPainter(waveAnimation.value),
-                  );
-                },
+    final pulseOnly = widget.statusText == null || widget.statusText!.trim().isEmpty;
+    final display = widget.statusText?.trim() ?? '';
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: true,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedBuilder(
+              animation: _ripple,
+              builder: (context, _) {
+                return CustomPaint(
+                  painter: _GrayRippleFieldPainter(_ripple.value),
+                );
+              },
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: pulseOnly
+                    ? const _CenteredPulseCaret()
+                    : Text(
+                        display,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                          color: AppColors.foreground,
+                          shadows: [
+                            Shadow(
+                              color: Color(0x80000000),
+                              blurRadius: 16,
+                              offset: Offset(0, 4),
+                            ),
+                            Shadow(
+                              color: Color(0x66000000),
+                              blurRadius: 28,
+                              offset: Offset(0, 8),
+                            ),
+                            Shadow(
+                              color: Color(0x66A0A0A0),
+                              blurRadius: 20,
+                              offset: Offset(0, 0),
+                            ),
+                          ],
+                        ),
+                      ),
               ),
-            )
-          else
-            Positioned.fill(
-              child: ColoredBox(color: AppColors.background.withAlpha(130)),
             ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                if (!animate)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 10),
-                    child: Icon(Icons.check_circle_outline, size: 18, color: AppColors.muted),
-                  ),
-                Expanded(
-                  child: Text(text,
-                      style: const TextStyle(fontSize: 12, color: AppColors.foreground)),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _WaveGradientPainter extends CustomPainter {
-  final double progress;
-  _WaveGradientPainter(this.progress);
+class _CenteredPulseCaret extends StatefulWidget {
+  const _CenteredPulseCaret();
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final full = Rect.fromLTWH(0, 0, size.width, size.height);
-    canvas.drawRect(full, Paint()..color = AppColors.surface);
+  State<_CenteredPulseCaret> createState() => _CenteredPulseCaretState();
+}
 
-    final waveW = size.width * 0.6;
-    final left = -waveW + (size.width + waveW) * progress;
-    final waveRect = Rect.fromLTWH(left, 0, waveW, size.height);
+class _CenteredPulseCaretState extends State<_CenteredPulseCaret>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulse;
 
-    canvas.save();
-    canvas.clipRect(waveRect);
-    canvas.drawRect(
-      waveRect,
-      Paint()
-        ..shader = const LinearGradient(
-          colors: [
-            AppColors.surface,
-            Color(0xFF1A5C4A),
-            Color(0xFF22896A),
-            Color(0xFF1A5C4A),
-            AppColors.surface,
-          ],
-        ).createShader(waveRect),
-    );
-    canvas.restore();
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat(reverse: true);
   }
 
   @override
-  bool shouldRepaint(_WaveGradientPainter oldDelegate) => oldDelegate.progress != progress;
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (_, __) {
+        return Opacity(
+          opacity: 0.35 + 0.65 * Curves.easeInOut.transform(_pulse.value),
+          child: const Text(
+            '▊',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              color: AppColors.foreground,
+              shadows: [
+                Shadow(color: Color(0x80000000), blurRadius: 16, offset: Offset(0, 4)),
+                Shadow(color: Color(0x66000000), blurRadius: 28, offset: Offset(0, 8)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _GrayRippleFieldPainter extends CustomPainter {
+  final double t;
+
+  _GrayRippleFieldPainter(this.t);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxR = math.max(size.width, size.height) * 0.72;
+    final breathe = 0.45 + 0.55 * math.sin(t * math.pi * 2);
+
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = Color.fromRGBO(128, 128, 128, 0.035 + 0.06 * breathe),
+    );
+
+    /// Soft thick “ring” = radial gradient with transparent center and edge, gray peak mid-radius.
+    void drawSoftRing(double outerRadius, double fade) {
+      if (outerRadius < 1.5) return;
+      final rect = Rect.fromCircle(center: center, radius: outerRadius);
+      final peak = (0.34 * fade).clamp(0.0, 1.0);
+      final mid = (0.14 * fade).clamp(0.0, 1.0);
+      final shader = RadialGradient(
+        center: Alignment.center,
+        radius: 1,
+        colors: [
+          const Color(0x00000000),
+          Color.fromRGBO(150, 150, 150, 0.0),
+          Color.fromRGBO(168, 168, 168, mid * 0.5),
+          Color.fromRGBO(196, 196, 196, peak),
+          Color.fromRGBO(178, 178, 178, mid),
+          Color.fromRGBO(155, 155, 155, mid * 0.35),
+          Color.fromRGBO(140, 140, 140, 0.0),
+          const Color(0x00000000),
+        ],
+        stops: const [0.0, 0.28, 0.38, 0.5, 0.62, 0.74, 0.86, 1.0],
+      ).createShader(rect);
+      canvas.drawCircle(center, outerRadius, Paint()..shader = shader);
+    }
+
+    const rings = 10;
+    for (var i = 0; i < rings; i++) {
+      final phase = (t + i / rings) % 1.0;
+      final outerR = maxR * phase;
+      final fade = (1 - phase).clamp(0.0, 1.0);
+      drawSoftRing(outerR, fade);
+    }
+
+    for (var i = 0; i < 5; i++) {
+      final phase = (t * 1.08 + i / 5) % 1.0;
+      final outerR = maxR * 0.92 * phase;
+      final fade = (1 - phase).clamp(0.0, 1.0);
+      if (outerR < 3) continue;
+      final rect = Rect.fromCircle(center: center, radius: outerR);
+      final shader = RadialGradient(
+        center: Alignment.center,
+        radius: 1,
+        colors: [
+          const Color(0x00000000),
+          Color.fromRGBO(158, 158, 158, 0.0),
+          Color.fromRGBO(172, 172, 172, 0.08 * fade),
+          Color.fromRGBO(188, 188, 188, 0.16 * fade),
+          Color.fromRGBO(172, 172, 172, 0.08 * fade),
+          Color.fromRGBO(150, 150, 150, 0.0),
+          const Color(0x00000000),
+        ],
+        stops: const [0.0, 0.18, 0.32, 0.5, 0.68, 0.82, 1.0],
+      ).createShader(rect);
+      canvas.drawCircle(center, outerR, Paint()..shader = shader);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GrayRippleFieldPainter oldDelegate) => oldDelegate.t != t;
 }
 
 class _PulseCursor extends StatefulWidget {
