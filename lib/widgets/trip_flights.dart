@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../utils/trip_helpers.dart';
 import '../utils/trip_formatting.dart';
+import 'animated_option_list.dart';
 import 'dual_price_display.dart';
 import 'ranked_trip_card.dart';
 
@@ -193,41 +194,17 @@ class _FlightRowState extends State<_FlightRow> {
   }
 
   Widget _buildOptionsList(List<Map<String, dynamic>> objectOptions, String? tripCurrency) {
-    if (objectOptions.length > 1 && widget.onOptionsReorder != null) {
-      return ReorderableListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: objectOptions.length,
-        onReorder: (oldIndex, newIndex) {
-          if (newIndex > oldIndex) newIndex--;
-          final item = objectOptions.removeAt(oldIndex);
-          objectOptions.insert(newIndex, item);
-          widget.onOptionsReorder!(List<dynamic>.from(objectOptions));
-        },
-        itemBuilder: (context, i) => Padding(
-          key: ValueKey('flight-opt-${widget.legIndex}-${widget.labelIndex}-$i-${objectOptions[i].hashCode}'),
-          padding: const EdgeInsets.only(bottom: 8),
-          child: _FlightOptionBox(
-            opt: objectOptions[i],
-            optionIndex: i,
-            parentFlight: widget.flight,
-            showChevrons: widget.showChevrons,
-            tripCurrency: tripCurrency,
-          ),
-        ),
-      );
-    }
-    return Column(
-      children: objectOptions.asMap().entries.map((e) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _FlightOptionBox(
-              opt: e.value,
-              optionIndex: e.key,
-              parentFlight: widget.flight,
-              showChevrons: widget.showChevrons,
-              tripCurrency: tripCurrency,
-            ),
-          )).toList(),
+    return AnimatedOptionList(
+      options: objectOptions,
+      onReorder: widget.onOptionsReorder,
+      itemBuilder: (context, opt, i, onSelect) => _FlightOptionBox(
+        opt: opt,
+        optionIndex: i,
+        parentFlight: widget.flight,
+        showChevrons: widget.showChevrons,
+        tripCurrency: tripCurrency,
+        onSelectToTop: onSelect,
+      ),
     );
   }
 }
@@ -237,8 +214,9 @@ class _FlightOptionBox extends StatefulWidget {
   final int optionIndex;
   final Map<String, dynamic> parentFlight;
   final bool showChevrons;
-  /// Captured from [TripDataProvider] at build time so reorder drag overlay (no provider) still formats prices.
+  /// Captured from [TripDataProvider] at build time when the subtree may not see the provider.
   final String? tripCurrency;
+  final VoidCallback? onSelectToTop;
 
   const _FlightOptionBox({
     required this.opt,
@@ -246,6 +224,7 @@ class _FlightOptionBox extends StatefulWidget {
     required this.parentFlight,
     this.showChevrons = false,
     this.tripCurrency,
+    this.onSelectToTop,
   });
 
   @override
@@ -362,6 +341,20 @@ class _FlightOptionBoxState extends State<_FlightOptionBox> {
               ),
             ),
           ),
+          if (widget.onSelectToTop != null)
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+              ),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: widget.onSelectToTop,
+                  child: const Text('Select'),
+                ),
+              ),
+            ),
           if (_detailsOpen)
             Container(
               width: double.infinity,

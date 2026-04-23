@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../utils/trip_helpers.dart';
 import '../utils/trip_formatting.dart';
+import 'animated_option_list.dart';
 import 'dual_price_display.dart';
 import 'ranked_trip_card.dart';
 
@@ -145,39 +146,16 @@ class _HotelRowState extends State<_HotelRow> {
   }
 
   Widget _buildOptionsList(List<Map<String, dynamic>> objectOptions) {
-    if (objectOptions.length > 1 && widget.onOptionsReorder != null) {
-      return ReorderableListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: objectOptions.length,
-        onReorder: (oldIndex, newIndex) {
-          if (newIndex > oldIndex) newIndex--;
-          final item = objectOptions.removeAt(oldIndex);
-          objectOptions.insert(newIndex, item);
-          widget.onOptionsReorder!(List<dynamic>.from(objectOptions));
-        },
-        itemBuilder: (context, i) => Padding(
-          key: ValueKey('hotel-opt-${widget.legIndex}-${widget.labelIndex}-$i-${objectOptions[i].hashCode}'),
-          padding: const EdgeInsets.only(bottom: 8),
-          child: _HotelOptionBox(
-            opt: objectOptions[i],
-            optionIndex: i,
-            parentStay: widget.stay,
-            showChevrons: widget.showChevrons,
-          ),
-        ),
-      );
-    }
-    return Column(
-      children: objectOptions.asMap().entries.map((e) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _HotelOptionBox(
-              opt: e.value,
-              optionIndex: e.key,
-              parentStay: widget.stay,
-              showChevrons: widget.showChevrons,
-            ),
-          )).toList(),
+    return AnimatedOptionList(
+      options: objectOptions,
+      onReorder: widget.onOptionsReorder,
+      itemBuilder: (context, opt, i, onSelect) => _HotelOptionBox(
+        opt: opt,
+        optionIndex: i,
+        parentStay: widget.stay,
+        showChevrons: widget.showChevrons,
+        onSelectToTop: onSelect,
+      ),
     );
   }
 }
@@ -187,12 +165,14 @@ class _HotelOptionBox extends StatefulWidget {
   final int optionIndex;
   final Map<String, dynamic> parentStay;
   final bool showChevrons;
+  final VoidCallback? onSelectToTop;
 
   const _HotelOptionBox({
     required this.opt,
     required this.optionIndex,
     required this.parentStay,
     this.showChevrons = false,
+    this.onSelectToTop,
   });
 
   @override
@@ -294,6 +274,20 @@ class _HotelOptionBoxState extends State<_HotelOptionBox> {
               ),
             ),
           ),
+          if (widget.onSelectToTop != null)
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: layers.border)),
+              ),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: widget.onSelectToTop,
+                  child: const Text('Select'),
+                ),
+              ),
+            ),
           if (_detailsOpen && offer != null)
             Container(
               width: double.infinity,

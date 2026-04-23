@@ -4,13 +4,13 @@ Flutter mobile client for the LifeTravel AI travel assistant. Provides the same 
 
 ## Overview
 
-The app connects to the LifeTravel backend via WebSocket and lets users describe travel plans in natural language. The server responds with structured itineraries containing ranked flight and hotel options that users can browse, reorder, and inspect in detail.
+The app connects to the LifeTravel backend via WebSocket and lets users describe travel plans in natural language. The server responds with structured itineraries containing ranked flight and hotel options that users can browse, reprioritize with a **Select** control, and inspect in detail.
 
 ### Key Features
 
 - **Chat interface** — free-form text input with real-time streaming responses
-- **Ranked trip cards** — itineraries with sortable flight and hotel options
-- **Drag-and-drop reordering** — reprioritize flight/hotel options; totals recompute automatically
+- **Ranked trip cards** — itineraries with ranked flight and hotel options
+- **Select to prioritize** — move a flight or hotel option to the top of its list; totals recompute automatically
 - **Trip modal** — full-screen detailed view of any itinerary
 - **Debug panel** — bottom-sheet overlay showing raw server messages
 - **Dark theme** — matches the web application's visual design
