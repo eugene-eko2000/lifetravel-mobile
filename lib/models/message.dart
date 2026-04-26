@@ -19,6 +19,8 @@ class Message {
   List<TripBlock> blocks;
   String? statusText;
   String? missingInfoText;
+  /// `payload.message` from `no_trips` / `no_trip` websocket envelopes.
+  String? noTripMessage;
 
   Message({
     String? id,
@@ -27,6 +29,7 @@ class Message {
     List<TripBlock>? blocks,
     this.statusText,
     this.missingInfoText,
+    this.noTripMessage,
   })  : id = id ?? _uuid.v4(),
         blocks = blocks ?? [];
 
@@ -34,7 +37,10 @@ class Message {
     List<TripBlock>? blocks,
     String? statusText,
     String? missingInfoText,
+    String? noTripMessage,
     bool clearStatusText = false,
+    bool clearMissingInfoText = false,
+    bool clearNoTripMessage = false,
   }) {
     return Message(
       id: id,
@@ -42,7 +48,8 @@ class Message {
       content: content,
       blocks: blocks ?? this.blocks,
       statusText: clearStatusText ? null : (statusText ?? this.statusText),
-      missingInfoText: missingInfoText ?? this.missingInfoText,
+      missingInfoText: clearMissingInfoText ? null : (missingInfoText ?? this.missingInfoText),
+      noTripMessage: clearNoTripMessage ? null : (noTripMessage ?? this.noTripMessage),
     );
   }
 }

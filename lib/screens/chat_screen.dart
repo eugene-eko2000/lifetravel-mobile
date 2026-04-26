@@ -28,6 +28,16 @@ String? _extractMissingInfoText(dynamic payload) {
   return null;
 }
 
+String? _extractNoTripMessage(dynamic value) {
+  if (!isObject(value)) return null;
+  final inner = (value as Map<String, dynamic>)['payload'];
+  if (!isObject(inner)) return null;
+  final msg = (inner as Map<String, dynamic>)['message'];
+  if (msg is! String) return null;
+  final t = msg.trim();
+  return t.isEmpty ? null : msg;
+}
+
 String? _extractPromptId(dynamic value) {
   String? fromObj(Map<String, dynamic> obj) {
     final raw = obj['prompt_id'];
@@ -114,7 +124,8 @@ class _ChatScreenState extends State<ChatScreen> {
       (_messages.isNotEmpty &&
           _messages.last.role == MessageRole.assistant &&
           _messages.last.blocks.isEmpty &&
-          (_messages.last.missingInfoText == null || _messages.last.missingInfoText!.isEmpty));
+          (_messages.last.missingInfoText == null || _messages.last.missingInfoText!.isEmpty) &&
+          (_messages.last.noTripMessage == null || _messages.last.noTripMessage!.isEmpty));
 
   /// Centered status / pulse with full-screen gray ripples while the assistant turn has not started streaming body text or blocks.
   bool _ambientStatusCoversChat() {
@@ -125,6 +136,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!(_isConnecting || _isStreaming)) return false;
     if (m.blocks.isNotEmpty) return false;
     if (m.missingInfoText != null && m.missingInfoText!.isNotEmpty) return false;
+    if (m.noTripMessage != null && m.noTripMessage!.isNotEmpty) return false;
     final hasStatus = m.statusText != null && m.statusText!.isNotEmpty;
     final waitingForStreamBody = m.content.isEmpty;
     return hasStatus || waitingForStreamBody;
@@ -227,7 +239,26 @@ class _ChatScreenState extends State<ChatScreen> {
           }
           setState(() {
             _updateAssistant(assistantId, (m) => m.copyWith(
-                missingInfoText: missingText, clearStatusText: true));
+                missingInfoText: missingText,
+                clearNoTripMessage: true,
+                clearStatusText: true));
+            _isStreaming = false;
+          });
+          return;
+        }
+
+        if (messageType == 'no_trips' || messageType == 'no_trip') {
+          final noTripText = _extractNoTripMessage(parsed) ??
+              'No trips are available for this request.';
+          if (parsed != null) {
+            final pid = _extractPromptId(parsed);
+            if (pid != null) _lastPromptId = pid;
+          }
+          setState(() {
+            _updateAssistant(assistantId, (m) => m.copyWith(
+                noTripMessage: noTripText,
+                clearMissingInfoText: true,
+                clearStatusText: true));
             _isStreaming = false;
           });
           return;
@@ -570,12 +601,32 @@ class _ChatScreenState extends State<ChatScreen> {
       ));
     }
 
+    if (message.noTripMessage != null && message.noTripMessage!.isNotEmpty) {
+      children.add(Semantics(
+        label: 'Trip response',
+        child: Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.background.withAlpha(130),
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            message.noTripMessage!,
+            style: const TextStyle(fontSize: 14, color: AppColors.foreground),
+          ),
+        ),
+      ));
+    }
+
     if (blocks.isEmpty) {
       if (message.content.isNotEmpty) {
         children.add(Text(message.content, style: const TextStyle(fontSize: 14, color: AppColors.foreground)));
       }
       if ((_isConnecting || _isStreaming) &&
           message.missingInfoText == null &&
+          message.noTripMessage == null &&
           (message.statusText == null || message.statusText!.isEmpty) &&
           !_ambientStatusCoversChat()) {
         children.add(_PulseCursor());
